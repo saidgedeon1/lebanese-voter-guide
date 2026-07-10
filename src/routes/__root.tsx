@@ -71,7 +71,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -111,12 +111,11 @@ function Nav() {
     <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-3 min-w-0">
-          <div
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-primary-foreground font-black text-xl"
-            style={{ background: "linear-gradient(135deg, var(--primary), var(--cedar))" }}
-          >
-            🇱🇧
-          </div>
+          <img
+            src="/logo.svg"
+            alt="شعار التطبيق"
+            className="h-11 w-11 shrink-0 rounded-2xl border border-border bg-card object-cover"
+          />
           <div className="min-w-0">
             <div className="font-extrabold text-base sm:text-lg leading-tight truncate">
               الماكينة الانتخابية

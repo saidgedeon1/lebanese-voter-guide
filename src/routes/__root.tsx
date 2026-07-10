@@ -166,7 +166,8 @@ function RootComponent() {
         <Outlet />
       </main>
       <footer className="mx-auto max-w-7xl px-4 sm:px-6 py-8 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} — الماكينة الانتخابية وسجل العائلات
+        <div>© {new Date().getFullYear()} — الماكينة الانتخابية وسجل العائلات</div>
+        <div className="mt-2 font-medium">app dev crafted by said GEDEON</div>
       </footer>
     </QueryClientProvider>
   );

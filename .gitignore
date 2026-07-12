@@ -36,3 +36,5 @@ dist-ssr
 
 .vercel
 .env*
+.tmp-brih*
+.tmp-brih-preview.json

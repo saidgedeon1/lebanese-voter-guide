@@ -6,6 +6,82 @@ import { createClient } from "@supabase/supabase-js";
 const ROOT = path.resolve("C:/Users/saidg/Projects/lebanese-voter-guide");
 const TMP = path.join(ROOT, ".tmp-brih");
 const YEAR = new Date().getFullYear();
+const YEAR2 = YEAR % 100;
+
+const FEMALE_NAMES = new Set(
+  [
+    "نجلا",
+    "جوسلين",
+    "نورما",
+    "هالا",
+    "جنى",
+    "منى",
+    "نغم",
+    "ريم",
+    "فيكتوريا",
+    "جوزفين",
+    "نجوى",
+    "ندى",
+    "ريما",
+    "ريتا",
+    "نوال",
+    "الين",
+    "باميلا",
+    "اموره",
+    "كريستيل",
+    "رولا",
+    "رين",
+    "ندين",
+    "ماري جو",
+    "ماري",
+    "زهرة",
+    "وردة",
+    "ملكة",
+    "اغنس",
+    "نعيمة",
+    "روز",
+    "روزه",
+    "زلفا",
+    "تراز",
+    "مهى",
+    "نمره",
+    "سميرة",
+    "مريم",
+    "ايفات",
+    "نظيرة",
+    "رانيه",
+    "سوزان",
+    "كاتيا",
+    "نانسي",
+    "لينا",
+    "كارلا",
+    "ديانا",
+    "ايفا",
+    "كلود",
+    "ميرا",
+    "سابين",
+    "جاكلين",
+    "فدوى",
+    "هند",
+    "سلمى",
+    "عبير",
+    "رندة",
+    "غادة",
+    "وفاء",
+    "سمر",
+    "رند",
+    "تالا",
+    "يارا",
+    "لاما",
+    "سيليا",
+    "ايما",
+    "ايلا",
+    "نويا",
+    "ماريا",
+    "اليسا",
+    "ايليا",
+  ].map((n) => n.trim()),
+);
 
 function loadEnv() {
   const text = fs.readFileSync(path.join(ROOT, ".env"), "utf8");
@@ -29,6 +105,19 @@ function findBrihRoot(dir) {
   return dir;
 }
 
+function isFemaleName(name) {
+  const n = (name || "").trim();
+  if (!n) return false;
+  if (FEMALE_NAMES.has(n)) return true;
+  // common Arabic feminine endings, but avoid short male names
+  if (/ة$/.test(n) || /ى$/.test(n)) return true;
+  if (n.includes("ماري") || n.includes("آن") || n.endsWith("ا") && n.length >= 4) {
+    // trailing ا is weak signal; only if known pattern
+    if (["حنا", "عيسى", "موسى", "زكريا"].includes(n)) return false;
+  }
+  return FEMALE_NAMES.has(n.split(/\s+/)[0] || "");
+}
+
 function parseAgeOrYear(raw) {
   if (raw == null || raw === "") return { birth_year: null, deceased: false };
   const s = String(raw).trim();
@@ -45,21 +134,98 @@ function parseAgeOrYear(raw) {
 
   const n = Number.parseInt(s, 10);
   if (!Number.isFinite(n)) return { birth_year: null, deceased: false };
+
+  // Full birth year
   if (n >= 1900 && n <= YEAR) return { birth_year: n, deceased: false };
-  if (n >= 0 && n <= 120) return { birth_year: YEAR - n, deceased: false };
+
+  // Two-digit birth year (84 => 1984, 01 => 2001)
+  if (n >= 0 && n <= 99) {
+    const full = n <= YEAR2 ? 2000 + n : 1900 + n;
+    return { birth_year: full, deceased: false };
+  }
+
   return { birth_year: null, deceased: false };
 }
 
-function guessRelation(people, idx) {
-  if (idx === 0) return "رب العائلة";
-  if (idx === 1) return "زوجة";
-  // Heuristic: if share father first-name with head, likely child
-  const head = people[0];
-  const person = people[idx];
-  if (person.father_name && head?.first_name && person.father_name === head.first_name) {
-    return "ابن";
+function shareParents(a, b) {
+  return Boolean(
+    a.father_name &&
+      b.father_name &&
+      a.father_name === b.father_name &&
+      a.mother_name &&
+      b.mother_name &&
+      a.mother_name === b.mother_name,
+  );
+}
+
+function assignRelations(people) {
+  if (people.length === 1) {
+    people[0].relation = "رب العائلة";
+    return people;
   }
-  return "ابن";
+
+  const asFather = new Map();
+  const asMother = new Map();
+  for (const p of people) {
+    if (p.father_name) asFather.set(p.father_name, (asFather.get(p.father_name) || 0) + 1);
+    if (p.mother_name) asMother.set(p.mother_name, (asMother.get(p.mother_name) || 0) + 1);
+  }
+
+  // On children's lines: الأب = الزوج, الأم = الزوجة
+  let head =
+    people
+      .map((p) => ({ p, score: asFather.get(p.first_name) || 0 }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)[0]?.p || null;
+
+  const wives = people
+    .map((p) => ({ p, score: asMother.get(p.first_name) || 0 }))
+    .filter((x) => x.score > 0 && x.p !== head)
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.p);
+
+  if (!head) head = people[0];
+
+  // Fallback: first non-sibling woman with different surname = wife
+  if (!wives.length) {
+    const fallback = people.find(
+      (p) =>
+        p !== head &&
+        !shareParents(p, head) &&
+        p.last_name &&
+        head.last_name &&
+        p.last_name !== head.last_name &&
+        !(asFather.get(p.first_name) > 0),
+    );
+    if (fallback) wives.push(fallback);
+  }
+
+  const wifeSet = new Set(wives);
+
+  for (const p of people) {
+    if (p === head) {
+      p.relation = "رب العائلة";
+      continue;
+    }
+    if (wifeSet.has(p)) {
+      p.relation = "زوجة";
+      continue;
+    }
+
+    // Parent of the husband living in household (not a wife of children)
+    if (head && p.first_name === head.mother_name && !wifeSet.has(p)) {
+      p.relation = "والدة";
+      continue;
+    }
+    if (head && p.first_name === head.father_name && p !== head) {
+      p.relation = "والد";
+      continue;
+    }
+
+    p.relation = isFemaleName(p.first_name) ? "ابنة" : "ابن";
+  }
+
+  return people;
 }
 
 function parseWorkbook(filePath, registryNumber) {
@@ -70,7 +236,6 @@ function parseWorkbook(filePath, registryNumber) {
 
   const header = (rows[0] || []).map((c) => (c == null ? "" : String(c).trim()));
 
-  // Skip municipal election sheets
   if (header.includes("الشهرة") && header.includes("الجنس")) return null;
   if (header.every((h) => !h) && rows.length > 1) {
     const h2 = (rows[1] || []).map((c) => (c == null ? "" : String(c).trim()));
@@ -104,36 +269,46 @@ function parseWorkbook(filePath, registryNumber) {
       mother_name: mother || null,
       birth_year: parsed.birth_year,
       deceased: parsed.deceased,
+      relation: "",
     });
   }
 
   if (!people.length) return null;
 
-  const familyLast = people.find((p) => p.last_name)?.last_name || "غير محدد";
+  const familyLast =
+    people.find((p) => p.last_name && people.filter((x) => x.last_name === p.last_name).length)?.last_name ||
+    people.find((p) => p.last_name)?.last_name ||
+    "غير محدد";
+
+  // Prefer the head-family surname for blank last names (not the wife's maiden name)
+  const citedFather = people.map((p) => p.father_name).filter(Boolean);
+  const probableHead = people.find((p) => citedFather.includes(p.first_name));
+  const defaultLast = probableHead?.last_name || familyLast;
+
   for (const p of people) {
-    if (!p.last_name) p.last_name = familyLast;
+    if (!p.last_name) p.last_name = defaultLast;
   }
 
-  const individuals = people.map((p, idx) => {
-    const relation = guessRelation(people, idx);
-    return {
-      relation,
-      first_name: p.first_name,
-      last_name: p.last_name,
-      father_name: p.father_name,
-      mother_name: p.mother_name,
-      birth_year: p.birth_year,
-      mobile: null,
-      current_residence: null,
-      marital_status: relation === "رب العائلة" || relation === "زوجة" ? "متزوج" : "أعزب",
-      lives_with_family: true,
-      is_military: false,
-      political_leaning: "غير مهتم",
-      preferred_candidate: p.deceased ? "متوفي" : null,
-      voter_status: "مقيم",
-      has_voted: false,
-    };
-  });
+  assignRelations(people);
+
+  // Wife should keep maiden last name from source; children/head keep family surname
+  const individuals = people.map((p) => ({
+    relation: p.relation,
+    first_name: p.first_name,
+    last_name: p.last_name,
+    father_name: p.father_name,
+    mother_name: p.mother_name,
+    birth_year: p.birth_year,
+    mobile: null,
+    current_residence: null,
+    marital_status: p.relation === "رب العائلة" || p.relation === "زوجة" ? "متزوج" : "أعزب",
+    lives_with_family: true,
+    is_military: false,
+    political_leaning: "غير مهتم",
+    preferred_candidate: p.deceased ? "متوفي" : null,
+    voter_status: "مقيم",
+    has_voted: false,
+  }));
 
   return {
     family: {
@@ -195,6 +370,28 @@ function collectForms() {
   return { forms, skipped, registries: registries.length };
 }
 
+async function deletePreviousBrihImport(sb) {
+  // Previous bulk import used sect=null for Brih/Chouf.
+  const { data: families, error } = await sb
+    .from("family_forms")
+    .select("id")
+    .eq("registry_town", "بريح")
+    .eq("registry_district", "الشوف")
+    .is("sect", null);
+
+  if (error) throw error;
+  const ids = (families || []).map((f) => f.id);
+  if (!ids.length) return { deletedFamilies: 0 };
+
+  // individuals cascade may not exist — delete explicitly
+  const { error: eInd } = await sb.from("individuals").delete().in("family_form_id", ids);
+  if (eInd) throw eInd;
+  const { error: eFam } = await sb.from("family_forms").delete().in("id", ids);
+  if (eFam) throw eFam;
+
+  return { deletedFamilies: ids.length };
+}
+
 async function main() {
   const dry = process.argv.includes("--dry");
   const env = loadEnv();
@@ -204,10 +401,12 @@ async function main() {
 
   const { forms, skipped, registries } = collectForms();
   const people = forms.reduce((s, f) => s + f.individuals.length, 0);
-  const deceased = forms.reduce(
-    (s, f) => s + f.individuals.filter((i) => i.preferred_candidate === "متوفي").length,
-    0,
-  );
+  const relationCounts = {};
+  for (const f of forms) {
+    for (const i of f.individuals) {
+      relationCounts[i.relation] = (relationCounts[i.relation] || 0) + 1;
+    }
+  }
 
   console.log(
     JSON.stringify(
@@ -215,16 +414,18 @@ async function main() {
         registries,
         forms: forms.length,
         people,
-        deceased,
         skipped: skipped.length,
+        relationCounts,
         dry,
-        sample: forms.slice(0, 2).map((f) => ({
+        sample: forms.slice(0, 5).map((f) => ({
           reg: f.family.registry_number,
           people: f.individuals.map((i) => ({
             n: i.first_name,
             l: i.last_name,
             r: i.relation,
             y: i.birth_year,
+            father: i.father_name,
+            mother: i.mother_name,
             d: i.preferred_candidate,
           })),
         })),
@@ -234,13 +435,12 @@ async function main() {
     ),
   );
 
-  if (dry) {
-    fs.writeFileSync(path.join(ROOT, ".tmp-brih-preview.json"), JSON.stringify(forms, null, 2));
-    console.log("Dry run only. Preview written.");
-    return;
-  }
+  if (dry) return;
 
   const sb = createClient(url, key);
+  const deleted = await deletePreviousBrihImport(sb);
+  console.log(JSON.stringify({ deleted }));
+
   let importedFamilies = 0;
   let importedPeople = 0;
   const errors = [];

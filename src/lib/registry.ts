@@ -180,19 +180,77 @@ export async function listIndividuals(filters: {
   residence?: string;
   political?: string;
   town?: string;
+  search?: string;
 } = {}) {
   let q = sb
     .from("individuals")
     .select("*, family:family_forms(*)")
-    .order("id", { ascending: false })
-    .limit(500);
+    .order("family_form_id", { ascending: false })
+    .order("id", { ascending: true })
+    .limit(5000);
   if (filters.residence) q = q.ilike("current_residence", `%${filters.residence}%`);
   if (filters.political) q = q.eq("political_leaning", filters.political);
   const { data, error } = await q;
   if (error) throw error;
-  let rows = (data ?? []) as (Individual & { family: FamilyForm })[];
-  if (filters.town) rows = rows.filter((r) => r.family?.registry_town?.includes(filters.town!));
-  return rows;
+
+  let rows = (data ?? []) as Array<
+    Individual & {
+      family: FamilyForm;
+      spouse_name?: string | null;
+    }
+  >;
+
+  if (filters.town) {
+    rows = rows.filter((r) => r.family?.registry_town?.includes(filters.town!));
+  }
+
+  if (filters.search?.trim()) {
+    const needle = filters.search.trim().toLowerCase();
+    rows = rows.filter((r) =>
+      [
+        r.first_name,
+        r.last_name,
+        r.father_name ?? "",
+        r.mother_name ?? "",
+        r.relation,
+        r.mobile ?? "",
+        r.family?.registry_number ?? "",
+        r.family?.registry_town ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
+    );
+  }
+
+  const byFamily = new Map<number, typeof rows>();
+  for (const row of rows) {
+    const list = byFamily.get(row.family_form_id) ?? [];
+    list.push(row);
+    byFamily.set(row.family_form_id, list);
+  }
+
+  return rows.map((row) => {
+    const relatives = byFamily.get(row.family_form_id) ?? [];
+    const selfRelation = normalizeRelation(row.relation);
+    const spouse = relatives.find((relative) => {
+      if (relative.id === row.id) return false;
+      const relation = normalizeRelation(relative.relation);
+      if (selfRelation === "زوج" || selfRelation === "رب العائلة" || selfRelation === "والد") {
+        return relation === "زوجة";
+      }
+      if (selfRelation === "زوجة" || selfRelation === "والدة") {
+        return relation === "زوج" || relation === "رب العائلة";
+      }
+      return relation === "زوج" || relation === "زوجة";
+    });
+
+    return {
+      ...row,
+      relation: normalizeRelation(row.relation) || row.relation,
+      spouse_name: spouse ? `${spouse.first_name} ${spouse.last_name}`.trim() : null,
+    };
+  });
 }
 
 export async function searchByName(name: string) {

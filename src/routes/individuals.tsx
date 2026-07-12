@@ -23,13 +23,14 @@ function canVote(birthYear: number | null | undefined, isMilitary: boolean | nul
 
 function IndividualsList() {
   const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
   const [residence, setResidence] = useState("");
   const [political, setPolitical] = useState("");
   const [town, setTown] = useState("");
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["individuals", residence, political, town],
-    queryFn: () => listIndividuals({ residence, political, town }),
+    queryKey: ["individuals", search, residence, political, town],
+    queryFn: () => listIndividuals({ search, residence, political, town }),
   });
 
   const remove = useMutation({
@@ -52,6 +53,7 @@ function IndividualsList() {
       "الشهرة",
       "اسم الأب",
       "اسم الأم",
+      "الزوج/الزوجة",
       "صلة القرابة",
       "بلدة النفوس",
       "السكن الحالي",
@@ -68,6 +70,7 @@ function IndividualsList() {
         r.last_name,
         r.father_name ?? "",
         r.mother_name ?? "",
+        r.spouse_name ?? "",
         r.relation,
         r.family?.registry_town ?? "",
         r.current_residence ?? "",
@@ -94,14 +97,28 @@ function IndividualsList() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">قائمة الأفراد</h1>
-          <p className="text-sm text-muted-foreground mt-1">فرز شامل، تعديل، حذف، وتصدير إلى CSV.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            كل الأشخاص المسجّلين: رب العائلة، الزوجة، الأم، الأولاد، وجميع الأفراد.
+          </p>
         </div>
-        <button className="btn-primary" onClick={exportCsv} disabled={!data?.length}>
-          تصدير CSV ↓
-        </button>
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="chip">المعروض: {(data?.length ?? 0).toLocaleString("ar-EG")}</span>
+          <button className="btn-primary" onClick={exportCsv} disabled={!data?.length}>
+            تصدير CSV ↓
+          </button>
+        </div>
       </div>
 
-      <div className="card-elev p-4 sm:p-5 grid sm:grid-cols-3 gap-3">
+      <div className="card-elev p-4 sm:p-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div>
+          <label className="label-ar">بحث بالاسم / الأب / الأم / الزوجة</label>
+          <input
+            className="field"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="اسم أي شخص في العائلة..."
+          />
+        </div>
         <div>
           <label className="label-ar">السكن الفعلي الحالي</label>
           <input className="field" value={residence} onChange={(e) => setResidence(e.target.value)} placeholder="بحث جزئي..." />
@@ -162,11 +179,14 @@ function IndividualsList() {
                       <div className="font-semibold">
                         {r.first_name} {r.last_name}
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        أب: {r.father_name || "—"} · أم: {r.mother_name || "—"}
+                      <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                        <div>
+                          أب: {r.father_name || "—"} · أم: {r.mother_name || "—"}
+                        </div>
+                        <div>زوج/زوجة: {r.spouse_name || "—"}</div>
                       </div>
                     </td>
-                    <td className="p-3">{r.relation}</td>
+                    <td className="p-3">{r.relation || "—"}</td>
                     <td className="p-3">{r.family?.registry_town || "—"}</td>
                     <td className="p-3 text-muted-foreground">{r.current_residence || "—"}</td>
                     <td className="p-3">

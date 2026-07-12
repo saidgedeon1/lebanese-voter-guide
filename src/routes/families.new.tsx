@@ -237,15 +237,21 @@ function NewFamily() {
 
   const mutation = useMutation({
     mutationFn: async () => {
+      const familyLastName = head.last_name.trim();
       const all = [head, ...members]
-        .filter((i) => i.first_name.trim() && i.last_name.trim())
         .map((i) => ({
           ...i,
+          first_name: i.first_name.trim(),
+          last_name: i.last_name.trim() || familyLastName,
           birth_year: i.birth_year ? parseInt(i.birth_year, 10) : null,
-        })) as any;
-      return createFamilyWithIndividuals(family as any, all);
+        }))
+        .filter((i) => i.first_name);
+      if (all.length === 0) {
+        throw new Error("لازم على الأقل اسم الشخص الرئيسي.");
+      }
+      return createFamilyWithIndividuals(family as any, all as any);
     },
-    onSuccess: () => navigate({ to: "/" }),
+    onSuccess: () => navigate({ to: "/individuals" }),
   });
 
   const updateMember = (idx: number, patch: Partial<IndividualDraft>) => {

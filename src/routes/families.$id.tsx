@@ -345,10 +345,24 @@ function EditFamilyPage() {
 
   const createMember = useMutation({
     mutationFn: async (draft: IndividualDraft) => {
-      if (!draft.first_name.trim() || !draft.last_name.trim()) {
-        throw new Error("الاسم والشهرة مطلوبان");
+      if (!draft.first_name.trim()) {
+        throw new Error("الاسم مطلوب");
       }
-      return addIndividualToFamily(familyId, toPayload(draft));
+      const fallbackLastName =
+        draft.last_name.trim() ||
+        members.find((m) => m.last_name.trim())?.last_name.trim() ||
+        data?.members.find((m) => m.last_name)?.last_name ||
+        "";
+      if (!fallbackLastName) {
+        throw new Error("الشهرة مطلوبة");
+      }
+      return addIndividualToFamily(
+        familyId,
+        toPayload({
+          ...draft,
+          last_name: fallbackLastName,
+        }),
+      );
     },
     onSuccess: async () => {
       setNewMember(null);

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   deleteIndividual,
+  displayMaritalStatus,
+  findSpouse,
   getFamilyMembers,
   listIndividuals,
   normalizeRelation,
@@ -122,18 +124,8 @@ function IndividualsList() {
     a.click();
   };
 
-  const spouseFromFamily = familyMembers?.find((member) => {
-    if (!viewing || member.id === viewing.id) return false;
-    const relation = normalizeRelation(member.relation);
-    const selectedRelation = normalizeRelation(viewing.relation);
-    if (selectedRelation === "زوج" || selectedRelation === "رب العائلة" || selectedRelation === "والد") {
-      return relation === "زوجة";
-    }
-    if (selectedRelation === "زوجة" || selectedRelation === "والدة") {
-      return relation === "زوج" || relation === "رب العائلة";
-    }
-    return relation === "زوج" || relation === "زوجة";
-  });
+  const spouseFromFamily =
+    viewing && familyMembers ? findSpouse(viewing, familyMembers) : null;
 
   const eligible = viewing ? canVote(viewing.birth_year, viewing.is_military) : null;
   const age = viewing ? getAge(viewing.birth_year) : null;
@@ -357,7 +349,7 @@ function IndividualsList() {
                 <Info label="اسم الأم" v={viewing.mother_name} />
                 <Info label="تاريخ الولادة" v={viewing.birth_year?.toString()} />
                 <Info label="الجوال" v={viewing.mobile} />
-                <Info label="الوضع العائلي" v={viewing.marital_status} />
+                <Info label="الوضع العائلي" v={displayMaritalStatus(viewing, spouseFromFamily)} />
                 <Info label="وضع الناخب" v={viewing.voter_status} />
                 <Info label="السكن مع الأهل" v={viewing.lives_with_family ? "نعم" : "لا"} />
                 <Info label="الميول السياسية" v={viewing.political_leaning} />

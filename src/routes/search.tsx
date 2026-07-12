@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  displayMaritalStatus,
+  findSpouse,
   getFamilyMembers,
   normalizeRelation,
   searchByName,
@@ -33,28 +35,9 @@ function SearchPage() {
     enabled: !!selected,
   });
 
-  const spouse = family?.find((member) => {
-    if (!selected) return false;
-    if (member.id === selected.id) return false;
-    const relation = normalizeRelation(member.relation);
-    const selectedRelation = normalizeRelation(selected.relation);
-    if (selectedRelation === "زوج" || selectedRelation === "رب العائلة" || selectedRelation === "والد") {
-      return relation === "زوجة";
-    }
-    if (selectedRelation === "زوجة" || selectedRelation === "والدة") {
-      return relation === "زوج" || relation === "رب العائلة";
-    }
-    // Parentage fallback: share children
-    return family.some(
-      (child) =>
-        child.id !== selected.id &&
-        child.id !== member.id &&
-        ((child.father_name === selected.first_name && child.mother_name === member.first_name) ||
-          (child.mother_name === selected.first_name && child.father_name === member.first_name)),
-    );
-  });
-
-  const selectedIsWife = normalizeRelation(selected?.relation) === "زوجة";
+  const spouse = selected && family ? findSpouse(selected, family) : null;
+  const selectedIsWife =
+    normalizeRelation(selected?.relation) === "زوجة" || normalizeRelation(selected?.relation) === "كنة";
 
   return (
     <div className="space-y-6">
@@ -145,9 +128,17 @@ function SearchPage() {
               <Info label="الشهرة / العائلة" v={selected.last_name} />
               <Info
                 label="الزوج / الزوجة"
-                v={spouse ? personLabel(spouse) : "غير مسجّل في الاستمارة"}
+                v={
+                  !family
+                    ? "جاري التحميل..."
+                    : spouse
+                      ? personLabel(spouse)
+                      : "غير مسجّل في الاستمارة"
+                }
               />
-              {spouse && normalizeRelation(spouse.relation) === "زوجة" && (
+              {spouse &&
+                (normalizeRelation(spouse.relation) === "زوجة" ||
+                  normalizeRelation(spouse.relation) === "كنة") && (
                 <Info label="عائلة الزوجة" v={spouse.last_name} />
               )}
               {selectedIsWife && <Info label="عائلتها (قبل الزواج)" v={selected.last_name} />}
@@ -155,7 +146,7 @@ function SearchPage() {
               <Info label="اسم الأم" v={selected.mother_name} />
               <Info label="تاريخ الولادة" v={selected.birth_year?.toString()} />
               <Info label="الجوال" v={selected.mobile} />
-              <Info label="الوضع العائلي" v={selected.marital_status} />
+              <Info label="الوضع العائلي" v={displayMaritalStatus(selected, spouse)} />
               <Info label="وضع الناخب" v={selected.voter_status} />
               <Info label="السكن مع الأهل" v={selected.lives_with_family == null ? null : selected.lives_with_family ? "نعم" : "لا"} />
               <Info label="عسكري" v={selected.is_military ? "نعم" : "لا"} />
@@ -256,29 +247,8 @@ function FamilyTree({
   );
   const childNames = new Set(children.map((c) => c.first_name));
 
-  // Spouse of focus: co-parent of focus's children, or stored زوج/زوجة
-  const spouseByKids = members.find((m) => {
-    if (m.id === focus.id || used.has(m.id)) return false;
-    return children.some(
-      (child) =>
-        (child.father_name === focus.first_name && child.mother_name === m.first_name) ||
-        (child.mother_name === focus.first_name && child.father_name === m.first_name),
-    );
-  });
-  const spouseByRelation = members.find((m) => {
-    if (m.id === focus.id || used.has(m.id) || (spouseByKids && m.id === spouseByKids.id)) return false;
-    const relation = normalizeRelation(m.relation);
-    const focusRelation = normalizeRelation(focus.relation);
-    if (focusRelation === "زوج" || focusRelation === "رب العائلة" || focusRelation === "والد") {
-      return relation === "زوجة";
-    }
-    if (focusRelation === "زوجة" || focusRelation === "والدة") {
-      return relation === "زوج" || relation === "رب العائلة";
-    }
-    return false;
-  });
   const spouses = take(
-    [spouseByKids, spouseByRelation].filter((m): m is Individual => !!m).filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i),
+    [findSpouse(focus, members)].filter((m): m is Individual => !!m),
   );
 
   // In-laws: married to children of focus (كنة / صهر) — NOT children themselves

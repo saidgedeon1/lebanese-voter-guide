@@ -373,7 +373,7 @@ function parseWorkbook(filePath, registryNumber, folderName = "") {
     birth_year: p.birth_year,
     mobile: null,
     current_residence: null,
-    marital_status: p.relation === "رب العائلة" || p.relation === "زوجة" ? "متزوج" : "أعزب",
+    marital_status: p.relation === "رب العائلة" || p.relation === "زوجة" || p.relation === "زوج" || p.relation === "كنة" || p.relation === "صهر" ? "متزوج" : "أعزب",
     lives_with_family: true,
     is_military: false,
     political_leaning: "غير مهتم",

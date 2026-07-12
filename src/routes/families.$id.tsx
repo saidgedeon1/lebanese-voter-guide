@@ -90,7 +90,7 @@ function emptyDraft(relation = "ابن", defaults: Partial<IndividualDraft> = {}
     birth_year: "",
     mobile: "",
     current_residence: "",
-    marital_status: "أعزب",
+    marital_status: ["زوجة", "زوج", "رب العائلة", "كنة", "صهر"].includes(relation) ? "متزوج" : "أعزب",
     lives_with_family: true,
     is_military: false,
     political_leaning: "غير مهتم",

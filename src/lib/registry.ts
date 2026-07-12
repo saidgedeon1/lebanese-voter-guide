@@ -119,6 +119,92 @@ export function normalizeRelation(relation: string | null | undefined) {
   return map[value] ?? value;
 }
 
+const MARRIED_RELATIONS = new Set(["رب العائلة", "زوج", "زوجة", "كنة", "صهر"]);
+
+/** Find spouse within the same form: by relation, co-parentage, then household head. */
+export function findSpouse(person: Individual, members: Individual[]): Individual | null {
+  if (!person || !members?.length) return null;
+  const self = normalizeRelation(person.relation);
+
+  const coParent = members.find((member) => {
+    if (member.id === person.id) return false;
+    return members.some(
+      (child) =>
+        child.id !== person.id &&
+        child.id !== member.id &&
+        ((child.father_name === person.first_name && child.mother_name === member.first_name) ||
+          (child.mother_name === person.first_name && child.father_name === member.first_name)),
+    );
+  });
+  if (coParent) return coParent;
+
+  const byRelation = members.find((member) => {
+    if (member.id === person.id) return false;
+    const relation = normalizeRelation(member.relation);
+    if (self === "زوج" || self === "رب العائلة" || self === "والد") {
+      return relation === "زوجة";
+    }
+    if (self === "زوجة" || self === "والدة") {
+      return relation === "زوج" || relation === "رب العائلة" || relation === "والد";
+    }
+    if (self === "كنة") {
+      return relation === "صهر" || relation === "زوج";
+    }
+    if (self === "صهر") {
+      return relation === "كنة" || relation === "زوجة";
+    }
+    return false;
+  });
+  if (byRelation) return byRelation;
+
+  // كنة without listed grandchildren: prefer the only son in the form
+  if (self === "كنة") {
+    const sons = members.filter((m) => m.id !== person.id && normalizeRelation(m.relation) === "ابن");
+    if (sons.length === 1) return sons[0];
+  }
+
+  if (self === "زوجة" || self === "والدة") {
+    const head = members.find((member) => {
+      if (member.id === person.id) return false;
+      const relation = normalizeRelation(member.relation);
+      return relation === "رب العائلة" || relation === "زوج" || relation === "والد";
+    });
+    if (head) return head;
+  }
+
+  return null;
+}
+
+/** Show marital status consistently; married relations never appear as single. */
+export function displayMaritalStatus(person: Individual, spouse?: Individual | null) {
+  const self = normalizeRelation(person.relation);
+  const female = FEMALE_RELATIONS.has(self);
+  let status = (person.marital_status ?? "").trim();
+
+  if (spouse || MARRIED_RELATIONS.has(self)) {
+    if (!status || status === "أعزب" || status === "عزباء") status = "متزوج";
+  }
+  if (!status) return "—";
+
+  if (female) {
+    const map: Record<string, string> = {
+      متزوج: "متزوجة",
+      أعزب: "عزباء",
+      مطلق: "مطلقة",
+      أرمل: "أرملة",
+    };
+    return map[status] ?? status;
+  }
+
+  const map: Record<string, string> = {
+    متزوجة: "متزوج",
+    عزباء: "أعزب",
+    مطلقة: "مطلق",
+    أرملة: "أرمل",
+  };
+  return map[status] ?? status;
+}
+
 // @ts-ignore - table not in generated types until refresh
 const sb: any = supabase;
 
@@ -279,18 +365,7 @@ export async function listIndividuals(filters: {
 
   return rows.map((row) => {
     const relatives = byFamily.get(row.family_form_id) ?? [];
-    const selfRelation = normalizeRelation(row.relation);
-    const spouse = relatives.find((relative) => {
-      if (relative.id === row.id) return false;
-      const relation = normalizeRelation(relative.relation);
-      if (selfRelation === "زوج" || selfRelation === "رب العائلة" || selfRelation === "والد") {
-        return relation === "زوجة";
-      }
-      if (selfRelation === "زوجة" || selfRelation === "والدة") {
-        return relation === "زوج" || relation === "رب العائلة";
-      }
-      return relation === "زوج" || relation === "زوجة";
-    });
+    const spouse = findSpouse(row, relatives);
 
     return {
       ...row,

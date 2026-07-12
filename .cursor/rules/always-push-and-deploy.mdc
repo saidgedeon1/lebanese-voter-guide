@@ -1,0 +1,16 @@
+---
+description: Always commit, push, and deploy completed app changes
+alwaysApply: true
+---
+
+# Always Push and Deploy
+
+After finishing user-requested app changes in this project:
+
+1. Commit the relevant changes with a clear message
+2. Push to `origin/main`
+3. Deploy production with `npx vercel --prod --yes`
+4. Return the live production URL
+
+Do this by default without waiting for the user to ask again.
+Do not force-push or rewrite published history.

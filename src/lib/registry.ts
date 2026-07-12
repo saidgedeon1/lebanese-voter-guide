@@ -59,7 +59,7 @@ export type FamilySummary = FamilyForm & {
   age_60_plus: number;
 };
 
-export const RELATION_OPTIONS = ["والد", "والدة", "ابن", "ابنة", "زوج", "زوجة"] as const;
+export const RELATION_OPTIONS = ["رب العائلة", "والد", "والدة", "ابن", "ابنة", "زوج", "زوجة"] as const;
 export const MARITAL_OPTIONS = ["متزوج", "أعزب", "مطلق", "أرمل"] as const;
 export const POLITICAL_OPTIONS = ["مؤيد", "معارض", "رمادي", "غير مهتم"] as const;
 export const VOTER_STATUS_OPTIONS = ["مقيم", "مغترب"] as const;
@@ -68,7 +68,7 @@ export const VOTER_STATUS_OPTIONS = ["مقيم", "مغترب"] as const;
 const sb: any = supabase;
 
 const FEMALE_RELATIONS = new Set(["والدة", "ابنة", "زوجة"]);
-const MALE_RELATIONS = new Set(["والد", "ابن", "زوج"]);
+const MALE_RELATIONS = new Set(["رب العائلة", "والد", "ابن", "زوج"]);
 
 function getCurrentYear() {
   return new Date().getFullYear();
@@ -88,7 +88,7 @@ function inferGender(relation: string) {
 }
 
 function getFamilyName(members: Individual[], registryTown: string) {
-  const prioritized = ["والد", "زوج", "ابن", "والدة", "زوجة", "ابنة"];
+  const prioritized = ["رب العائلة", "والد", "زوج", "ابن", "والدة", "زوجة", "ابنة"];
   const anchor =
     prioritized
       .map((relation) => members.find((member) => member.relation === relation && member.last_name))

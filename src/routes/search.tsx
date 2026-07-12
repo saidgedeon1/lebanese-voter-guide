@@ -132,6 +132,7 @@ function Info({ label, v }: { label: string; v?: string | null }) {
 
 function FamilyTree({ members, focusId }: { members: Individual[]; focusId: number }) {
   const groups: Record<string, Individual[]> = {
+    "رب العائلة": members.filter((m) => m.relation === "رب العائلة"),
     "الأب / الأم": members.filter((m) => ["والد", "والدة"].includes(m.relation)),
     "الزوج / الزوجة": members.filter((m) => ["زوج", "زوجة"].includes(m.relation)),
     "الأبناء": members.filter((m) => ["ابن", "ابنة"].includes(m.relation)),

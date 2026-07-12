@@ -104,6 +104,7 @@ function Nav() {
   const links: Array<{ to: string; label: string }> = [
     { to: "/", label: "لوحة التحكم" },
     { to: "/families/new", label: "إضافة استمارة" },
+    { to: "/import", label: "استيراد Excel" },
     { to: "/individuals", label: "قائمة الأفراد" },
     { to: "/search", label: "البحث الذكي" },
   ];

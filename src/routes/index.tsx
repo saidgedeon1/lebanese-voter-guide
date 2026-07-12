@@ -147,6 +147,7 @@ function Dashboard() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to="/families/new" className="btn-primary">+ إضافة استمارة جديدة</Link>
+            <Link to="/import" className="btn-ghost">استيراد Excel</Link>
             <Link to="/search" className="btn-ghost">البحث عن شخص</Link>
           </div>
         </div>
@@ -163,11 +164,16 @@ function Dashboard() {
         </section>
       )}
 
-      <section className="grid md:grid-cols-3 gap-4">
+      <section className="grid md:grid-cols-4 gap-4">
         <Link to="/families/new" className="card-elev p-6 hover:shadow-lg transition">
           <div className="text-3xl mb-2">📝</div>
           <h3 className="font-bold text-lg">إدخال استمارة</h3>
           <p className="text-sm text-muted-foreground mt-1">أضف عائلة جديدة مع كامل أفرادها في خطوتين.</p>
+        </Link>
+        <Link to="/import" className="card-elev p-6 hover:shadow-lg transition">
+          <div className="text-3xl mb-2">📥</div>
+          <h3 className="font-bold text-lg">استيراد Excel</h3>
+          <p className="text-sm text-muted-foreground mt-1">ارفع ملف إكسل لاستيراد عائلات وأفراد دفعة واحدة.</p>
         </Link>
         <Link to="/individuals" className="card-elev p-6 hover:shadow-lg transition">
           <div className="text-3xl mb-2">📋</div>

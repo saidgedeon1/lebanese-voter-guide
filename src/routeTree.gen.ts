@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as IndividualsRouteImport } from './routes/individuals'
+import { Route as ImportRouteImport } from './routes/import'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as FamiliesNewRouteImport } from './routes/families.new'
 
@@ -22,6 +23,11 @@ const SearchRoute = SearchRouteImport.update({
 const IndividualsRoute = IndividualsRouteImport.update({
   id: '/individuals',
   path: '/individuals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImportRoute = ImportRouteImport.update({
+  id: '/import',
+  path: '/import',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,12 +43,14 @@ const FamiliesNewRoute = FamiliesNewRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/import': typeof ImportRoute
   '/individuals': typeof IndividualsRoute
   '/search': typeof SearchRoute
   '/families/new': typeof FamiliesNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/import': typeof ImportRoute
   '/individuals': typeof IndividualsRoute
   '/search': typeof SearchRoute
   '/families/new': typeof FamiliesNewRoute
@@ -50,20 +58,23 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/import': typeof ImportRoute
   '/individuals': typeof IndividualsRoute
   '/search': typeof SearchRoute
   '/families/new': typeof FamiliesNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/individuals' | '/search' | '/families/new'
+  fullPaths: '/' | '/import' | '/individuals' | '/search' | '/families/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/individuals' | '/search' | '/families/new'
-  id: '__root__' | '/' | '/individuals' | '/search' | '/families/new'
+  to: '/' | '/import' | '/individuals' | '/search' | '/families/new'
+  id:
+    '__root__' | '/' | '/import' | '/individuals' | '/search' | '/families/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ImportRoute: typeof ImportRoute
   IndividualsRoute: typeof IndividualsRoute
   SearchRoute: typeof SearchRoute
   FamiliesNewRoute: typeof FamiliesNewRoute
@@ -85,6 +96,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndividualsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/import': {
+      id: '/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof ImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -104,6 +122,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ImportRoute: ImportRoute,
   IndividualsRoute: IndividualsRoute,
   SearchRoute: SearchRoute,
   FamiliesNewRoute: FamiliesNewRoute,

@@ -64,6 +64,34 @@ export const MARITAL_OPTIONS = ["متزوج", "أعزب", "مطلق", "أرمل"
 export const POLITICAL_OPTIONS = ["مؤيد", "معارض", "رمادي", "غير مهتم"] as const;
 export const VOTER_STATUS_OPTIONS = ["مقيم", "مغترب"] as const;
 
+/** Normalize common Lebanese spellings so spouses/parents still show in family views. */
+export function normalizeRelation(relation: string | null | undefined) {
+  const value = (relation ?? "").trim();
+  const map: Record<string, string> = {
+    "رب العائلة": "رب العائلة",
+    "رب الاسرة": "رب العائلة",
+    "رب الأسرة": "رب العائلة",
+    "والد": "والد",
+    "الاب": "والد",
+    "الأب": "والد",
+    "والدة": "والدة",
+    "الام": "والدة",
+    "الأم": "والدة",
+    "ابن": "ابن",
+    "ولد": "ابن",
+    "ابنة": "ابنة",
+    "بنت": "ابنة",
+    "زوج": "زوج",
+    "زوجة": "زوجة",
+    "مرات": "زوجة",
+    "مارة": "زوجة",
+    "مرته": "زوجة",
+    "مراته": "زوجة",
+    "زوجه": "زوجة",
+  };
+  return map[value] ?? value;
+}
+
 // @ts-ignore - table not in generated types until refresh
 const sb: any = supabase;
 
@@ -82,8 +110,9 @@ function getAge(birthYear: number | null) {
 }
 
 function inferGender(relation: string) {
-  if (FEMALE_RELATIONS.has(relation)) return "female";
-  if (MALE_RELATIONS.has(relation)) return "male";
+  const normalized = normalizeRelation(relation);
+  if (FEMALE_RELATIONS.has(normalized)) return "female";
+  if (MALE_RELATIONS.has(normalized)) return "male";
   return "unknown";
 }
 
@@ -91,9 +120,10 @@ function getFamilyName(members: Individual[], registryTown: string) {
   const prioritized = ["رب العائلة", "والد", "زوج", "ابن", "والدة", "زوجة", "ابنة"];
   const anchor =
     prioritized
-      .map((relation) => members.find((member) => member.relation === relation && member.last_name))
-      .find(Boolean) ??
-    members.find((member) => member.last_name);
+      .map((relation) =>
+        members.find((member) => normalizeRelation(member.relation) === relation && member.last_name),
+      )
+      .find(Boolean) ?? members.find((member) => member.last_name);
 
   if (anchor?.last_name) {
     return `عائلة ${anchor.last_name}`;
@@ -171,8 +201,10 @@ export async function searchByName(name: string) {
   const { data, error } = await sb
     .from("individuals")
     .select("*, family:family_forms(*)")
-    .or(`first_name.ilike.${like},last_name.ilike.${like},father_name.ilike.${like}`)
-    .limit(50);
+    .or(
+      `first_name.ilike.${like},last_name.ilike.${like},father_name.ilike.${like},mother_name.ilike.${like},relation.ilike.${like}`,
+    )
+    .limit(100);
   if (error) throw error;
   return (data ?? []) as (Individual & { family: FamilyForm })[];
 }

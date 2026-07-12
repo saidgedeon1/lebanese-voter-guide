@@ -109,7 +109,10 @@ function Nav() {
     { to: "/search", label: "البحث الذكي" },
   ];
   return (
-    <header className="sticky top-0 z-40 bg-background border-b border-border shadow-sm">
+    <header
+      className="sticky top-0 z-50 border-b border-border shadow-sm"
+      style={{ backgroundColor: "oklch(1 0 0)" }}
+    >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         <Link to="/" className="flex items-center gap-3 min-w-0">
           <img

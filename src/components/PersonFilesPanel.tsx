@@ -103,12 +103,18 @@ export function PersonFilesPanel({
       )}
 
       <div className="flex flex-col sm:flex-row gap-4 items-start">
-        <div className="shrink-0 space-y-2">
-          <div className="w-28 h-28 rounded-xl border border-border bg-muted overflow-hidden flex items-center justify-center">
+        <div className="shrink-0 space-y-2 flex flex-col items-center">
+          <div className="passport-photo relative w-[7.5rem] h-[10rem] overflow-hidden bg-[#f3f1ec]">
             {photo ? (
-              <img src={photo.url} alt={personName || "صورة"} className="w-full h-full object-cover" />
+              <img
+                src={photo.url}
+                alt={personName || "صورة"}
+                className="absolute inset-0 h-full w-full object-cover object-[center_18%]"
+              />
             ) : (
-              <span className="text-xs text-muted-foreground text-center px-2">لا صورة</span>
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground px-2 text-center">
+                صورة جواز
+              </div>
             )}
           </div>
           <input

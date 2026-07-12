@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { PersonFilesPanel } from "@/components/PersonFilesPanel";
+import { PassportPhoto } from "@/components/PassportPhoto";
 import {
   deleteIndividual,
   displayMaritalStatus,
@@ -313,13 +314,22 @@ function IndividualsList() {
           {viewing && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-2xl font-black text-right">
-                  {viewing.first_name} {viewing.last_name}
-                </DialogTitle>
-                <DialogDescription className="text-right">
-                  استمارة #{viewing.family_form_id} · {viewing.family?.registry_town || "—"} —{" "}
-                  {viewing.family?.registry_district || "—"}
-                </DialogDescription>
+                <div className="flex items-start gap-4">
+                  <PassportPhoto
+                    personId={viewing.id}
+                    name={`${viewing.first_name} ${viewing.last_name}`}
+                    size="md"
+                  />
+                  <div className="min-w-0 flex-1 text-right">
+                    <DialogTitle className="text-2xl font-black text-right">
+                      {viewing.first_name} {viewing.last_name}
+                    </DialogTitle>
+                    <DialogDescription className="text-right">
+                      استمارة #{viewing.family_form_id} · {viewing.family?.registry_town || "—"} —{" "}
+                      {viewing.family?.registry_district || "—"}
+                    </DialogDescription>
+                  </div>
+                </div>
               </DialogHeader>
 
               <div className="flex flex-wrap gap-2 justify-end">
@@ -430,16 +440,19 @@ function FamilyMembersList({ members, focusId }: { members: Individual[]; focusI
                 : "border-border"
           }`}
         >
-          <div className="min-w-0">
-            <div className="font-semibold text-sm">
-              {m.first_name} {m.last_name}
-              {m.id === focusId && (
-                <span className="chip mr-2 !bg-primary !text-primary-foreground">المعرض</span>
-              )}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {normalizeRelation(m.relation) || m.relation || "غير محدد"}
-              {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
+          <div className="flex items-center gap-3 min-w-0">
+            <PassportPhoto personId={m.id} name={`${m.first_name} ${m.last_name}`} size="sm" />
+            <div className="min-w-0">
+              <div className="font-semibold text-sm">
+                {m.first_name} {m.last_name}
+                {m.id === focusId && (
+                  <span className="chip mr-2 !bg-primary !text-primary-foreground">المعرض</span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {normalizeRelation(m.relation) || m.relation || "غير محدد"}
+                {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
+              </div>
             </div>
           </div>
           {m.is_military && (

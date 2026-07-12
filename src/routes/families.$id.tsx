@@ -17,6 +17,7 @@ import {
 } from "@/lib/registry";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PersonFilesPanel } from "@/components/PersonFilesPanel";
+import { PassportPhoto } from "@/components/PassportPhoto";
 
 type FamilyEditSearch = {
   member?: number;
@@ -590,12 +591,23 @@ function EditFamilyPage() {
             }`}
           >
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="chip">{member.relation || "فرد"}</span>
-                <span className="font-bold text-lg">
-                  {member.first_name} {member.last_name}
-                </span>
-                {member.id ? <span className="text-xs text-muted-foreground">#{member.id}</span> : null}
+              <div className="flex items-center gap-3 min-w-0">
+                {member.id ? (
+                  <PassportPhoto
+                    personId={member.id}
+                    name={`${member.first_name} ${member.last_name}`}
+                    size="md"
+                  />
+                ) : null}
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="chip">{member.relation || "فرد"}</span>
+                    {member.id ? <span className="text-xs text-muted-foreground">#{member.id}</span> : null}
+                  </div>
+                  <div className="font-bold text-lg leading-tight">
+                    {member.first_name} {member.last_name}
+                  </div>
+                </div>
               </div>
               <div className="flex gap-2">
                 <button

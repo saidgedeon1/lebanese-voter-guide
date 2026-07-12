@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { PersonFilesPanel } from "@/components/PersonFilesPanel";
+import { PassportPhoto } from "@/components/PassportPhoto";
 import {
   displayMaritalStatus,
   findSpouse,
@@ -10,7 +12,6 @@ import {
   type Individual,
   type FamilyForm,
 } from "@/lib/registry";
-import { PersonFilesPanel } from "@/components/PersonFilesPanel";
 
 export const Route = createFileRoute("/search")({
   component: SearchPage,
@@ -114,11 +115,23 @@ function SearchPage() {
                 )}
               </div>
             </div>
-            <div className="text-3xl font-black mb-1">
-              {selected.first_name} {selected.last_name}
-            </div>
-            <div className="text-sm text-muted-foreground mb-4">
-              {selected.first_name} {selected.father_name || "—"} {selected.last_name}
+            <div className="flex items-start gap-4 mb-4">
+              <PassportPhoto
+                personId={selected.id}
+                name={`${selected.first_name} ${selected.last_name}`}
+                size="lg"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-3xl font-black mb-1 leading-tight">
+                  {selected.first_name} {selected.last_name}
+                </div>
+                <div className="text-sm text-muted-foreground mb-1">
+                  {selected.first_name} {selected.father_name || "—"} {selected.last_name}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {normalizeRelation(selected.relation) || selected.relation}
+                </div>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 mb-5">
               <Link
@@ -345,22 +358,25 @@ function FamilyTree({
                           : "border-border hover:bg-muted cursor-pointer"
                     }`}
                   >
-                    <div className="min-w-0">
-                      <div className="font-semibold text-sm">
-                        {personLabel(m)}
-                        {isFocus && (
-                          <span className="chip mr-2 !bg-primary !text-primary-foreground">أنت هنا</span>
-                        )}
-                        {!isFocus && (
-                          <span className="text-xs text-primary font-medium mr-2">عرض الملف ←</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {normalizeRelation(m.relation) || m.relation || "غير محدد"}
-                        {title === "الزوج / الزوجة" && normalizeRelation(m.relation) === "زوجة"
-                          ? ` · عائلتها: ${m.last_name}`
-                          : ""}
-                        {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <PassportPhoto personId={m.id} name={personLabel(m)} size="sm" />
+                      <div className="min-w-0">
+                        <div className="font-semibold text-sm">
+                          {personLabel(m)}
+                          {isFocus && (
+                            <span className="chip mr-2 !bg-primary !text-primary-foreground">أنت هنا</span>
+                          )}
+                          {!isFocus && (
+                            <span className="text-xs text-primary font-medium mr-2">عرض الملف ←</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {normalizeRelation(m.relation) || m.relation || "غير محدد"}
+                          {title === "الزوج / الزوجة" && normalizeRelation(m.relation) === "زوجة"
+                            ? ` · عائلتها: ${m.last_name}`
+                            : ""}
+                          {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
+                        </div>
                       </div>
                     </div>
                     {m.is_military && (

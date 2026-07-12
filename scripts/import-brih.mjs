@@ -327,12 +327,20 @@ function parseWorkbook(filePath, registryNumber, folderName = "") {
   const people = [];
   for (const row of rows.slice(1)) {
     if (!Array.isArray(row)) continue;
-    const first = row[colName] == null ? "" : String(row[colName]).trim();
-    if (!first) continue;
+    const cells = row.map((c) => (c == null ? "" : String(c).trim()));
+    const wifeOf = cells.map((c) => c.match(/^زوجة\s+(\S+)/)?.[1]).find(Boolean) || null;
+    const markedMarried = cells.some((c) => c === "متزوج" || c === "متزوجة");
+    // Prefer last non-empty name-like cell when "متزوج" leaked into الاسم column
+    let first = row[colName] == null ? "" : String(row[colName]).trim();
+    if (first === "متزوج" || first === "متزوجة") {
+      first = cells.filter((c) => c && c !== "متزوج" && c !== "متزوجة" && !c.startsWith("زوجة")).at(-1) || "";
+    }
+    if (!first || first.startsWith("زوجة")) continue;
     const last = row[colFamily] == null ? "" : String(row[colFamily]).trim();
     const father = row[colFather] == null ? "" : String(row[colFather]).trim();
     const mother = row[colMother] == null ? "" : String(row[colMother]).trim();
-    const parsed = parseAgeOrYear(row[colAge]);
+    const yearCell = cells.find((c) => /^\d{2}$|^\d{4}$/.test(c)) ?? row[colAge];
+    const parsed = parseAgeOrYear(yearCell);
     people.push({
       first_name: first,
       last_name: last,
@@ -341,6 +349,8 @@ function parseWorkbook(filePath, registryNumber, folderName = "") {
       birth_year: parsed.birth_year,
       deceased: parsed.deceased,
       relation: "",
+      wife_of: wifeOf,
+      marked_married: markedMarried || Boolean(wifeOf),
     });
   }
 
@@ -363,6 +373,23 @@ function parseWorkbook(filePath, registryNumber, folderName = "") {
 
   assignRelations(people);
 
+  // Excel notes like "زوجة جوزيف مارون خليل" → كنة linked to that son
+  for (const p of people) {
+    if (!p.wife_of) continue;
+    p.relation = "كنة";
+    const husband = people.find((h) => h.first_name === p.wife_of);
+    if (husband) {
+      husband.marked_married = true;
+      if (husband.relation === "والد" || !husband.relation) husband.relation = "ابن";
+    }
+  }
+
+  for (const p of people) {
+    if (p.marked_married && (p.relation === "ابن" || p.relation === "صهر" || p.relation === "زوج")) {
+      // keep for marital_status mapping below
+    }
+  }
+
   // Wife should keep maiden last name from source; children/head keep family surname
   const individuals = people.map((p) => ({
     relation: p.relation,
@@ -373,7 +400,15 @@ function parseWorkbook(filePath, registryNumber, folderName = "") {
     birth_year: p.birth_year,
     mobile: null,
     current_residence: null,
-    marital_status: p.relation === "رب العائلة" || p.relation === "زوجة" || p.relation === "زوج" || p.relation === "كنة" || p.relation === "صهر" ? "متزوج" : "أعزب",
+    marital_status:
+      p.marked_married ||
+      p.relation === "رب العائلة" ||
+      p.relation === "زوجة" ||
+      p.relation === "زوج" ||
+      p.relation === "كنة" ||
+      p.relation === "صهر"
+        ? "متزوج"
+        : "أعزب",
     lives_with_family: true,
     is_military: false,
     political_leaning: "غير مهتم",

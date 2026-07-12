@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { nameFieldsMatch, nameTokenMatches } from "@/lib/name-search";
 
 export type FamilyForm = {
   id: number;
@@ -345,28 +346,27 @@ export async function listIndividuals(filters: {
   }
 
   if (filters.search?.trim()) {
-    const needle = normalizeArabic(filters.search);
-    const tokens = needle.split(/\s+/).filter(Boolean);
+    const tokens = filters.search.trim().split(/\s+/).filter(Boolean);
     rows = rows.filter((r) => {
-      const first = normalizeArabic(r.first_name);
-      const father = normalizeArabic(r.father_name);
-      const last = normalizeArabic(r.last_name);
-      const mother = normalizeArabic(r.mother_name);
-      const blob = normalizeArabic(
-        [first, father, last, mother, `${first} ${father} ${last}`, r.relation, r.family?.registry_number ?? "", r.family?.registry_town ?? ""].join(
-          " ",
-        ),
-      );
+      const fields = [r.first_name, r.father_name, r.last_name, r.mother_name];
       if (tokens.length >= 3) {
         const [a, b, c] = tokens;
-        if (first.includes(a) && father.includes(b) && last.includes(c)) return true;
+        if (nameTokenMatches(r.first_name, a!) && nameTokenMatches(r.father_name, b!) && nameTokenMatches(r.last_name, c!)) {
+          return true;
+        }
       }
       if (tokens.length === 2) {
         const [a, b] = tokens;
-        if (first.includes(a) && (last.includes(b) || father.includes(b))) return true;
+        if (
+          nameTokenMatches(r.first_name, a!) &&
+          (nameTokenMatches(r.last_name, b!) || nameTokenMatches(r.father_name, b!))
+        ) {
+          return true;
+        }
+        if (nameTokenMatches(r.last_name, `${a} ${b}`)) return true;
       }
-      if (tokens.length > 1 && tokens.every((token) => blob.includes(token))) return true;
-      return blob.includes(needle);
+      if (nameFieldsMatch(fields, [filters.search!.trim()])) return true;
+      return nameFieldsMatch(fields, tokens);
     });
   }
 
@@ -394,9 +394,8 @@ export async function listIndividuals(filters: {
 export async function searchByName(name: string) {
   const raw = name.trim();
   if (!raw) return [] as (Individual & { family: FamilyForm })[];
-  const needle = normalizeArabic(raw);
-  if (!needle) return [];
-  const tokens = needle.split(/\s+/).filter(Boolean);
+  const tokens = raw.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return [];
 
   const { data, error } = await sb
     .from("individuals")
@@ -407,36 +406,50 @@ export async function searchByName(name: string) {
 
   return ((data ?? []) as (Individual & { family: FamilyForm })[])
     .filter((row) => {
-      const first = normalizeArabic(row.first_name);
-      const father = normalizeArabic(row.father_name);
-      const last = normalizeArabic(row.last_name);
-      const mother = normalizeArabic(row.mother_name);
-      const triple = `${first} ${father} ${last}`.trim();
-      const duo = `${first} ${last}`.trim();
-      const blob = normalizeArabic(
-        [first, father, last, mother, duo, triple, row.relation, row.family?.registry_town ?? "", row.family?.registry_number ?? ""].join(
-          " ",
-        ),
-      );
+      const fields = [row.first_name, row.father_name, row.last_name, row.mother_name];
 
       // الاسم الثلاثي: الاسم + اسم الأب + الشهرة
       if (tokens.length >= 3) {
         const [a, b, c] = tokens;
-        if (first.includes(a) && father.includes(b) && last.includes(c)) return true;
-        if (triple.includes(tokens.slice(0, 3).join(" "))) return true;
+        if (
+          nameTokenMatches(row.first_name, a!) &&
+          nameTokenMatches(row.father_name, b!) &&
+          nameTokenMatches(row.last_name, c!)
+        ) {
+          return true;
+        }
       }
 
       // اسم + شهرة أو اسم + أب
       if (tokens.length === 2) {
         const [a, b] = tokens;
-        if (first.includes(a) && (last.includes(b) || father.includes(b))) return true;
-        if (duo.includes(needle) || `${first} ${father}`.includes(needle)) return true;
+        if (
+          nameTokenMatches(row.first_name, a!) &&
+          (nameTokenMatches(row.last_name, b!) || nameTokenMatches(row.father_name, b!))
+        ) {
+          return true;
+        }
+        // compound English surname: "abu assi", "el feghali"
+        if (nameTokenMatches(row.first_name, a!) && nameTokenMatches(row.last_name, `${a} ${b}`)) {
+          return true;
+        }
+        if (nameTokenMatches(row.last_name, `${a} ${b}`) || nameTokenMatches(row.first_name, `${a} ${b}`)) {
+          return true;
+        }
       }
 
-      // كل الكلمات موجودة (مو شرط ورا بعض)
-      if (tokens.length > 1 && tokens.every((token) => blob.includes(token))) return true;
+      // Full query as one alias (e.g. "el feghali")
+      if (nameFieldsMatch(fields, [raw])) return true;
 
-      return blob.includes(needle);
+      // Every token matches some name field (Arabic or English)
+      if (nameFieldsMatch(fields, tokens)) return true;
+
+      // Also match registry town / number for Arabic queries
+      const needle = normalizeArabic(raw);
+      const blob = normalizeArabic(
+        [row.relation, row.family?.registry_town ?? "", row.family?.registry_number ?? ""].join(" "),
+      );
+      return Boolean(needle) && blob.includes(needle);
     })
     .slice(0, 150);
 }

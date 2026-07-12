@@ -46,7 +46,7 @@ function SearchPage() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-black">محرك البحث الذكي</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          ابحث بالاسم، الشهرة، أو الاسم الثلاثي — بالعربي أو بالإنكليزي (مثل Pamela / Elias Khalil).
+          ابحث بالاسم، الشهرة، أو الاسم الثلاثي — بالعربي أو بالإنكليزي.
         </p>
       </div>
 
@@ -55,7 +55,7 @@ function SearchPage() {
           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xl">🔍</span>
           <input
             className="field !pr-12 !py-4 !text-lg"
-            placeholder="Pamela Feghali أو باميلا الفغالي أو اسم ثلاثي..."
+            placeholder="اسم، شهرة، أو اسم ثلاثي (عربي أو إنكليزي)..."
             value={q}
             onChange={(e) => {
               setQ(e.target.value);

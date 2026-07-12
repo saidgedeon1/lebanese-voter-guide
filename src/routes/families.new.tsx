@@ -8,6 +8,7 @@ import {
   VOTER_STATUS_OPTIONS,
   createFamilyWithIndividuals,
 } from "@/lib/registry";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 export const Route = createFileRoute("/families/new")({
   component: NewFamily,
@@ -228,6 +229,7 @@ function NewFamily() {
   });
   const [head, setHead] = useState<IndividualDraft>(createIndividual("رب العائلة"));
   const [members, setMembers] = useState<IndividualDraft[]>([]);
+  const [pendingDeleteIdx, setPendingDeleteIdx] = useState<number | null>(null);
 
   const canProceed =
     !!family.registry_district.trim() &&
@@ -481,7 +483,7 @@ function NewFamily() {
                 </div>
                 <button
                   className="text-destructive text-sm font-semibold hover:underline"
-                  onClick={() => setMembers((p) => p.filter((_, i) => i !== idx))}
+                  onClick={() => setPendingDeleteIdx(idx)}
                 >
                   حذف
                 </button>
@@ -521,6 +523,22 @@ function NewFamily() {
           )}
         </div>
       )}
+
+      <ConfirmDeleteDialog
+        open={pendingDeleteIdx !== null}
+        onOpenChange={(open) => !open && setPendingDeleteIdx(null)}
+        title="تأكيد حذف الفرد"
+        description={
+          pendingDeleteIdx !== null
+            ? `هل أنت متأكد من حذف ${members[pendingDeleteIdx]?.first_name || "هذا الفرد"} من الاستمارة؟`
+            : ""
+        }
+        onConfirm={() => {
+          if (pendingDeleteIdx === null) return;
+          setMembers((p) => p.filter((_, i) => i !== pendingDeleteIdx));
+          setPendingDeleteIdx(null);
+        }}
+      />
     </div>
   );
 }

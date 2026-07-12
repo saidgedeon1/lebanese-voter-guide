@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 export const Route = createFileRoute("/individuals")({
   component: IndividualsList,
@@ -48,6 +49,7 @@ function IndividualsList() {
   const [political, setPolitical] = useState("");
   const [town, setTown] = useState("");
   const [viewing, setViewing] = useState<ListedIndividual | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ListedIndividual | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["individuals", search, residence, political, town],
@@ -63,6 +65,7 @@ function IndividualsList() {
   const remove = useMutation({
     mutationFn: (id: number) => deleteIndividual(id),
     onSuccess: async () => {
+      setPendingDelete(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["stats"] }),
         queryClient.invalidateQueries({ queryKey: ["family-summaries"] }),
@@ -279,11 +282,7 @@ function IndividualsList() {
                           type="button"
                           className="text-destructive font-semibold hover:underline"
                           disabled={remove.isPending}
-                          onClick={() => {
-                            if (window.confirm(`متأكد بدك تمسح ${r.first_name} ${r.last_name}؟`)) {
-                              remove.mutate(r.id);
-                            }
-                          }}
+                          onClick={() => setPendingDelete(r)}
                         >
                           حذف
                         </button>
@@ -299,6 +298,21 @@ function IndividualsList() {
       {remove.error && (
         <div className="card-elev p-4 text-destructive text-sm">{(remove.error as Error).message}</div>
       )}
+
+      <ConfirmDeleteDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && !remove.isPending && setPendingDelete(null)}
+        title="تأكيد حذف الفرد"
+        description={
+          pendingDelete
+            ? `هل أنت متأكد من حذف ${pendingDelete.first_name} ${pendingDelete.last_name}؟ لا يمكن التراجع عن هذا الإجراء.`
+            : ""
+        }
+        pending={remove.isPending}
+        onConfirm={() => {
+          if (pendingDelete) remove.mutate(pendingDelete.id);
+        }}
+      />
 
       <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">

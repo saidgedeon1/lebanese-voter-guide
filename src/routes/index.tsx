@@ -8,6 +8,7 @@ import {
   POLITICAL_OPTIONS,
   type FamilySummary,
 } from "@/lib/registry";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -60,9 +61,11 @@ function FamilyDetails({
   onDeleted?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const deleteMutation = useMutation({
     mutationFn: () => deleteFamilyForm(family.id),
     onSuccess: async () => {
+      setConfirmOpen(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["stats"] }),
         queryClient.invalidateQueries({ queryKey: ["family-summaries"] }),
@@ -82,15 +85,21 @@ function FamilyDetails({
           type="button"
           className="btn-ghost !text-destructive"
           disabled={deleteMutation.isPending}
-          onClick={() => {
-            if (window.confirm("متأكد بدك تمسح هالاستمارة مع كل أفرادها؟")) {
-              deleteMutation.mutate();
-            }
-          }}
+          onClick={() => setConfirmOpen(true)}
         >
           {deleteMutation.isPending ? "جاري الحذف..." : "حذف الاستمارة"}
         </button>
       </div>
+
+      <ConfirmDeleteDialog
+        open={confirmOpen}
+        onOpenChange={(open) => !open && !deleteMutation.isPending && setConfirmOpen(false)}
+        title="تأكيد حذف الاستمارة"
+        description={`هل أنت متأكد من حذف استمارة ${family.family_name} مع كل أفرادها؟ لا يمكن التراجع عن هذا الإجراء.`}
+        confirmLabel="تأكيد حذف الاستمارة"
+        pending={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate()}
+      />
 
       <div className="grid gap-3 md:grid-cols-4">
         <FamilyMetric label="أعمار العائلة" value={formatAgeSummary(family)} />

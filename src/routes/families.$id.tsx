@@ -14,6 +14,7 @@ import {
   addIndividualToFamily,
   type Individual,
 } from "@/lib/registry";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 export const Route = createFileRoute("/families/$id")({
   component: EditFamilyPage,
@@ -259,6 +260,8 @@ function EditFamilyPage() {
   const [members, setMembers] = useState<IndividualDraft[]>([]);
   const [newMember, setNewMember] = useState<IndividualDraft | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingDeleteMember, setPendingDeleteMember] = useState<IndividualDraft | null>(null);
+  const [pendingDeleteFamily, setPendingDeleteFamily] = useState(false);
 
   useEffect(() => {
     if (!data) return;
@@ -351,6 +354,7 @@ function EditFamilyPage() {
   const removeMember = useMutation({
     mutationFn: async (memberId: number) => deleteIndividual(memberId),
     onSuccess: async () => {
+      setPendingDeleteMember(null);
       setMessage("تم حذف الفرد من الاستمارة.");
       await invalidateAll();
       await refetch();
@@ -407,6 +411,7 @@ function EditFamilyPage() {
   const removeFamily = useMutation({
     mutationFn: async () => deleteFamilyForm(familyId),
     onSuccess: async () => {
+      setPendingDeleteFamily(false);
       await invalidateAll();
       navigate({ to: "/" });
     },
@@ -456,11 +461,7 @@ function EditFamilyPage() {
           <button
             className="btn-ghost !text-destructive !border-destructive/40"
             disabled={removeFamily.isPending}
-            onClick={() => {
-              if (window.confirm("متأكد بدك تمسح الاستمارة كاملة مع كل أفرادها؟")) {
-                removeFamily.mutate();
-              }
-            }}
+            onClick={() => setPendingDeleteFamily(true)}
           >
             {removeFamily.isPending ? "جاري الحذف..." : "حذف الاستمارة"}
           </button>
@@ -554,9 +555,7 @@ function EditFamilyPage() {
                   disabled={removeMember.isPending || members.length <= 1}
                   title={members.length <= 1 ? "ما فيك تمسح آخر فرد بالاستمارة" : "حذف الفرد من الاستمارة"}
                   onClick={() => {
-                    if (member.id && window.confirm(`متأكد بدك تمسح ${member.first_name} من الاستمارة؟`)) {
-                      removeMember.mutate(member.id);
-                    }
+                    if (member.id) setPendingDeleteMember(member);
                   }}
                 >
                   حذف من الاستمارة
@@ -713,6 +712,31 @@ function EditFamilyPage() {
           </div>
         </div>
       </section>
+
+      <ConfirmDeleteDialog
+        open={!!pendingDeleteMember}
+        onOpenChange={(open) => !open && !removeMember.isPending && setPendingDeleteMember(null)}
+        title="تأكيد حذف الفرد"
+        description={
+          pendingDeleteMember
+            ? `هل أنت متأكد من حذف ${pendingDeleteMember.first_name} ${pendingDeleteMember.last_name} من الاستمارة؟ لا يمكن التراجع عن هذا الإجراء.`
+            : ""
+        }
+        pending={removeMember.isPending}
+        onConfirm={() => {
+          if (pendingDeleteMember?.id) removeMember.mutate(pendingDeleteMember.id);
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        open={pendingDeleteFamily}
+        onOpenChange={(open) => !open && !removeFamily.isPending && setPendingDeleteFamily(false)}
+        title="تأكيد حذف الاستمارة"
+        description="هل أنت متأكد من حذف الاستمارة كاملة مع كل أفرادها؟ لا يمكن التراجع عن هذا الإجراء."
+        confirmLabel="تأكيد حذف الاستمارة"
+        pending={removeFamily.isPending}
+        onConfirm={() => removeFamily.mutate()}
+      />
     </div>
   );
 }

@@ -220,6 +220,7 @@ function IndividualsList() {
                         <Link
                           to="/families/$id"
                           params={{ id: String(r.family_form_id) }}
+                          hash="members"
                           className="text-primary font-semibold hover:underline"
                         >
                           تعديل

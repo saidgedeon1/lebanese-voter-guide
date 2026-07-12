@@ -322,10 +322,24 @@ function EditFamilyPage() {
   const saveMember = useMutation({
     mutationFn: async (draft: IndividualDraft) => {
       if (!draft.id) throw new Error("فرد غير موجود");
-      if (!draft.first_name.trim() || !draft.last_name.trim()) {
-        throw new Error("الاسم والشهرة مطلوبان");
+      if (!draft.first_name.trim()) {
+        throw new Error("الاسم مطلوب");
       }
-      return updateIndividual(draft.id, toPayload(draft));
+      const fallbackLastName =
+        draft.last_name.trim() ||
+        members.find((m) => m.last_name.trim())?.last_name.trim() ||
+        data?.members.find((m) => m.last_name)?.last_name ||
+        "";
+      if (!fallbackLastName) {
+        throw new Error("الشهرة مطلوبة");
+      }
+      return updateIndividual(
+        draft.id,
+        toPayload({
+          ...draft,
+          last_name: fallbackLastName,
+        }),
+      );
     },
     onSuccess: async () => {
       setMessage("تم حفظ بيانات الفرد.");
@@ -337,7 +351,7 @@ function EditFamilyPage() {
   const removeMember = useMutation({
     mutationFn: async (memberId: number) => deleteIndividual(memberId),
     onSuccess: async () => {
-      setMessage("تم حذف الفرد.");
+      setMessage("تم حذف الفرد من الاستمارة.");
       await invalidateAll();
       await refetch();
     },
@@ -366,11 +380,29 @@ function EditFamilyPage() {
     },
     onSuccess: async () => {
       setNewMember(null);
-      setMessage("تمت إضافة الفرد.");
+      setMessage("تمت إضافة الفرد إلى الاستمارة.");
       await invalidateAll();
       await refetch();
     },
   });
+
+  const familyLastName = members.find((m) => m.last_name.trim())?.last_name.trim() || data?.members.find((m) => m.last_name)?.last_name || "";
+
+  const startAddMember = (relation: string) => {
+    setMessage(null);
+    setNewMember(
+      emptyDraft(relation, {
+        last_name: familyLastName,
+        father_name:
+          relation === "ابن" || relation === "ابنة"
+            ? members.find((m) => ["رب العائلة", "والد", "زوج"].includes(m.relation))?.first_name || ""
+            : "",
+      }),
+    );
+    requestAnimationFrame(() => {
+      document.getElementById("new-member-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   const removeFamily = useMutation({
     mutationFn: async () => deleteFamilyForm(familyId),
@@ -379,6 +411,16 @@ function EditFamilyPage() {
       navigate({ to: "/" });
     },
   });
+
+  useEffect(() => {
+    if (!data) return;
+    if (typeof window === "undefined") return;
+    if (window.location.hash === "#members") {
+      requestAnimationFrame(() => {
+        document.getElementById("members")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [data]);
 
   if (isLoading) {
     return <div className="card-elev p-6 text-muted-foreground">جاري تحميل الاستمارة...</div>;
@@ -401,13 +443,16 @@ function EditFamilyPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">تعديل الاستمارة #{familyId}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {data.family_name} · {data.registry_town} — {data.registry_district}
+            {data.family_name} · {data.registry_town} — {data.registry_district} · {members.length} أفراد
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link to="/" className="btn-ghost">
             العودة
           </Link>
+          <a href="#members" className="btn-primary">
+            إدارة الأفراد
+          </a>
           <button
             className="btn-ghost !text-destructive !border-destructive/40"
             disabled={removeFamily.isPending}
@@ -434,6 +479,108 @@ function EditFamilyPage() {
           ).message}
         </div>
       )}
+
+      <section id="members" className="space-y-4 scroll-mt-24">
+        <div className="card-elev p-5 sm:p-6 space-y-4">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="font-bold text-xl">أفراد العائلة</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                زيد أو امسح فرد من نفس الاستمارة من هون
+              </p>
+            </div>
+            <button className="btn-primary" onClick={() => startAddMember("ابن")} disabled={!!newMember}>
+              + إضافة فرد
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              { relation: "زوجة", label: "+ زوجة" },
+              { relation: "زوج", label: "+ زوج" },
+              { relation: "والدة", label: "+ والدة" },
+              { relation: "والد", label: "+ والد" },
+              { relation: "ابن", label: "+ ابن" },
+              { relation: "ابنة", label: "+ ابنة" },
+            ].map((item) => (
+              <button
+                key={item.relation}
+                type="button"
+                className="chip hover:bg-primary hover:text-primary-foreground transition cursor-pointer border border-border"
+                disabled={!!newMember}
+                onClick={() => startAddMember(item.relation)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {newMember && (
+          <div id="new-member-form" className="card-elev p-5 sm:p-6 space-y-4 border-2 border-primary/40 scroll-mt-24">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h3 className="font-bold text-lg">فرد جديد — {newMember.relation}</h3>
+              <button className="btn-ghost" onClick={() => setNewMember(null)}>
+                إلغاء
+              </button>
+            </div>
+            <IndividualFields ind={newMember} onChange={(patch) => setNewMember((prev) => (prev ? { ...prev, ...patch } : prev))} />
+            <button className="btn-primary w-full sm:w-auto" disabled={createMember.isPending} onClick={() => createMember.mutate(newMember)}>
+              {createMember.isPending ? "جاري الإضافة..." : "حفظ الفرد الجديد في الاستمارة"}
+            </button>
+          </div>
+        )}
+
+        {members.map((member, idx) => (
+          <div key={member.id ?? idx} className="card-elev p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="chip">{member.relation || "فرد"}</span>
+                <span className="font-bold text-lg">
+                  {member.first_name} {member.last_name}
+                </span>
+                {member.id ? <span className="text-xs text-muted-foreground">#{member.id}</span> : null}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="btn-primary"
+                  disabled={saveMember.isPending}
+                  onClick={() => saveMember.mutate(member)}
+                >
+                  حفظ
+                </button>
+                <button
+                  className="btn-ghost !text-destructive !border-destructive/40"
+                  disabled={removeMember.isPending || members.length <= 1}
+                  title={members.length <= 1 ? "ما فيك تمسح آخر فرد بالاستمارة" : "حذف الفرد من الاستمارة"}
+                  onClick={() => {
+                    if (member.id && window.confirm(`متأكد بدك تمسح ${member.first_name} من الاستمارة؟`)) {
+                      removeMember.mutate(member.id);
+                    }
+                  }}
+                >
+                  حذف من الاستمارة
+                </button>
+              </div>
+            </div>
+            <IndividualFields
+              ind={member}
+              onChange={(patch) =>
+                setMembers((prev) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item)))
+              }
+            />
+          </div>
+        ))}
+
+        {members.length === 0 && !newMember && (
+          <div className="card-elev p-6 text-center space-y-3">
+            <p className="text-muted-foreground">ما في أفراد بهالاستمارة بعد.</p>
+            <button className="btn-primary" onClick={() => startAddMember("رب العائلة")}>
+              + إضافة أول فرد
+            </button>
+          </div>
+        )}
+      </section>
 
       <section className="card-elev p-5 sm:p-7 space-y-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -565,78 +712,6 @@ function EditFamilyPage() {
             </Field>
           </div>
         </div>
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="font-bold text-xl">أفراد العائلة</h2>
-          <button
-            className="btn-ghost"
-            onClick={() =>
-              setNewMember(
-                emptyDraft("ابن", {
-                  last_name: members[0]?.last_name || data.members[0]?.last_name || "",
-                }),
-              )
-            }
-          >
-            + إضافة فرد
-          </button>
-        </div>
-
-        {members.map((member, idx) => (
-          <div key={member.id ?? idx} className="card-elev p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="chip">فرد #{member.id}</span>
-                <span className="font-bold">
-                  {member.first_name} {member.last_name}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="btn-primary"
-                  disabled={saveMember.isPending}
-                  onClick={() => saveMember.mutate(member)}
-                >
-                  حفظ الفرد
-                </button>
-                <button
-                  className="btn-ghost !text-destructive"
-                  disabled={removeMember.isPending}
-                  onClick={() => {
-                    if (member.id && window.confirm("متأكد بدك تمسح هالفرد؟")) {
-                      removeMember.mutate(member.id);
-                    }
-                  }}
-                >
-                  حذف
-                </button>
-              </div>
-            </div>
-            <IndividualFields
-              ind={member}
-              onChange={(patch) =>
-                setMembers((prev) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item)))
-              }
-            />
-          </div>
-        ))}
-
-        {newMember && (
-          <div className="card-elev p-5 sm:p-6 space-y-4 border-primary/30">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-bold">فرد جديد</h3>
-              <button className="btn-ghost" onClick={() => setNewMember(null)}>
-                إلغاء
-              </button>
-            </div>
-            <IndividualFields ind={newMember} onChange={(patch) => setNewMember((prev) => (prev ? { ...prev, ...patch } : prev))} />
-            <button className="btn-primary" disabled={createMember.isPending} onClick={() => createMember.mutate(newMember)}>
-              {createMember.isPending ? "جاري الإضافة..." : "حفظ الفرد الجديد"}
-            </button>
-          </div>
-        )}
       </section>
     </div>
   );

@@ -1,11 +1,31 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { deleteIndividual, listIndividuals, POLITICAL_OPTIONS } from "@/lib/registry";
+import {
+  deleteIndividual,
+  getFamilyMembers,
+  listIndividuals,
+  normalizeRelation,
+  POLITICAL_OPTIONS,
+  type FamilyForm,
+  type Individual,
+} from "@/lib/registry";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/individuals")({
   component: IndividualsList,
 });
+
+type ListedIndividual = Individual & {
+  family: FamilyForm;
+  spouse_name?: string | null;
+};
 
 function getAge(birthYear: number | null | undefined) {
   if (!birthYear) return null;
@@ -27,10 +47,17 @@ function IndividualsList() {
   const [residence, setResidence] = useState("");
   const [political, setPolitical] = useState("");
   const [town, setTown] = useState("");
+  const [viewing, setViewing] = useState<ListedIndividual | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["individuals", search, residence, political, town],
     queryFn: () => listIndividuals({ search, residence, political, town }),
+  });
+
+  const { data: familyMembers, isLoading: familyLoading } = useQuery({
+    queryKey: ["family-members", viewing?.family_form_id],
+    queryFn: () => getFamilyMembers(viewing!.family_form_id),
+    enabled: !!viewing,
   });
 
   const remove = useMutation({
@@ -91,6 +118,22 @@ function IndividualsList() {
     a.download = "individuals.csv";
     a.click();
   };
+
+  const spouseFromFamily = familyMembers?.find((member) => {
+    if (!viewing || member.id === viewing.id) return false;
+    const relation = normalizeRelation(member.relation);
+    const selectedRelation = normalizeRelation(viewing.relation);
+    if (selectedRelation === "زوج" || selectedRelation === "رب العائلة" || selectedRelation === "والد") {
+      return relation === "زوجة";
+    }
+    if (selectedRelation === "زوجة" || selectedRelation === "والدة") {
+      return relation === "زوج" || relation === "رب العائلة";
+    }
+    return relation === "زوج" || relation === "زوجة";
+  });
+
+  const eligible = viewing ? canVote(viewing.birth_year, viewing.is_military) : null;
+  const age = viewing ? getAge(viewing.birth_year) : null;
 
   return (
     <div className="space-y-6">
@@ -169,8 +212,8 @@ function IndividualsList() {
                 </tr>
               )}
               {data?.map((r) => {
-                const eligible = canVote(r.birth_year, r.is_military);
-                const age = getAge(r.birth_year);
+                const rowEligible = canVote(r.birth_year, r.is_military);
+                const rowAge = getAge(r.birth_year);
 
                 return (
                   <tr key={r.id} className={`border-t border-border ${r.is_military ? "bg-destructive/5" : ""}`}>
@@ -205,18 +248,25 @@ function IndividualsList() {
                     <td className="p-3">
                       {r.is_military ? (
                         <span className="chip !bg-destructive !text-destructive-foreground">عسكري — لا</span>
-                      ) : eligible === true ? (
+                      ) : rowEligible === true ? (
                         <span className="chip !bg-success !text-success-foreground">
-                          نعم{age !== null ? ` · ${age}` : ""}
+                          نعم{rowAge !== null ? ` · ${rowAge}` : ""}
                         </span>
-                      ) : eligible === false ? (
-                        <span className="chip">لا{age !== null ? ` · ${age}` : ""}</span>
+                      ) : rowEligible === false ? (
+                        <span className="chip">لا{rowAge !== null ? ` · ${rowAge}` : ""}</span>
                       ) : (
                         <span className="chip">غير محدد</span>
                       )}
                     </td>
                     <td className="p-3">
                       <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="text-foreground font-semibold hover:underline"
+                          onClick={() => setViewing(r)}
+                        >
+                          عرض
+                        </button>
                         <Link
                           to="/families/$id"
                           params={{ id: String(r.family_form_id) }}
@@ -249,6 +299,135 @@ function IndividualsList() {
       {remove.error && (
         <div className="card-elev p-4 text-destructive text-sm">{(remove.error as Error).message}</div>
       )}
+
+      <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          {viewing && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-black text-right">
+                  {viewing.first_name} {viewing.last_name}
+                </DialogTitle>
+                <DialogDescription className="text-right">
+                  استمارة #{viewing.family_form_id} · {viewing.family?.registry_town || "—"} —{" "}
+                  {viewing.family?.registry_district || "—"}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex flex-wrap gap-2 justify-end">
+                {viewing.is_military && (
+                  <span className="chip !bg-destructive !text-destructive-foreground">عسكري — لا يحق له الاقتراع</span>
+                )}
+                <span className="chip">{normalizeRelation(viewing.relation) || viewing.relation || "فرد"}</span>
+                {eligible === true && (
+                  <span className="chip !bg-success !text-success-foreground">
+                    يحق له الاقتراع{age !== null ? ` · ${age}` : ""}
+                  </span>
+                )}
+                {eligible === false && !viewing.is_military && (
+                  <span className="chip">لا يحق له الاقتراع{age !== null ? ` · ${age}` : ""}</span>
+                )}
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4 text-sm">
+                <Info
+                  label="الزوج / الزوجة"
+                  v={
+                    spouseFromFamily
+                      ? `${spouseFromFamily.first_name} ${spouseFromFamily.last_name}`
+                      : viewing.spouse_name || "غير مسجّل"
+                  }
+                />
+                <Info label="رقم السجل" v={viewing.family?.registry_number} />
+                <Info label="اسم الأب" v={viewing.father_name} />
+                <Info label="اسم الأم" v={viewing.mother_name} />
+                <Info label="التولد" v={viewing.birth_year?.toString()} />
+                <Info label="الجوال" v={viewing.mobile} />
+                <Info label="الوضع العائلي" v={viewing.marital_status} />
+                <Info label="وضع الناخب" v={viewing.voter_status} />
+                <Info label="السكن مع الأهل" v={viewing.lives_with_family ? "نعم" : "لا"} />
+                <Info label="الميول السياسية" v={viewing.political_leaning} />
+                <Info label="الصوت التفضيلي" v={viewing.preferred_candidate} />
+                <Info label="اقترع يوم الانتخاب" v={viewing.has_voted ? "نعم" : "لا"} />
+                <div className="sm:col-span-2">
+                  <Info label="السكن الفعلي" v={viewing.current_residence} />
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4 space-y-3">
+                <h3 className="font-bold text-lg">أفراد الاستمارة</h3>
+                {familyLoading && <div className="text-sm text-muted-foreground">جاري التحميل...</div>}
+                {!familyLoading && familyMembers && (
+                  <FamilyMembersList members={familyMembers} focusId={viewing.id} />
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 justify-end pt-2">
+                <button type="button" className="btn-ghost" onClick={() => setViewing(null)}>
+                  إغلاق
+                </button>
+                <Link
+                  to="/families/$id"
+                  params={{ id: String(viewing.family_form_id) }}
+                  hash="members"
+                  className="btn-primary"
+                  onClick={() => setViewing(null)}
+                >
+                  تعديل الاستمارة
+                </Link>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function Info({ label, v }: { label: string; v?: string | null }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground font-semibold">{label}</dt>
+      <dd className="font-medium">{v || "—"}</dd>
+    </div>
+  );
+}
+
+function FamilyMembersList({ members, focusId }: { members: Individual[]; focusId: number }) {
+  if (members.length === 0) {
+    return <div className="text-sm text-muted-foreground">لا يوجد أفراد مسجّلون في هذه الاستمارة.</div>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {members.map((m) => (
+        <div
+          key={m.id}
+          className={`p-3 rounded-lg border flex items-center justify-between gap-2 ${
+            m.id === focusId
+              ? "border-primary bg-primary/5"
+              : m.is_military
+                ? "border-destructive/30 bg-destructive/5"
+                : "border-border"
+          }`}
+        >
+          <div className="min-w-0">
+            <div className="font-semibold text-sm">
+              {m.first_name} {m.last_name}
+              {m.id === focusId && (
+                <span className="chip mr-2 !bg-primary !text-primary-foreground">المعرض</span>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {normalizeRelation(m.relation) || m.relation || "غير محدد"}
+              {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
+            </div>
+          </div>
+          {m.is_military && (
+            <span className="chip !bg-destructive !text-destructive-foreground shrink-0">عسكري</span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

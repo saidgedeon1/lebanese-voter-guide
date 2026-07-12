@@ -186,20 +186,33 @@ function toFamilySummary(family: FamilyForm & { individuals?: Individual[] | nul
 }
 
 export async function fetchStats() {
-  const [{ count: individuals }, { count: families }, { count: supporters }, { count: military }, { count: voted }] =
-    await Promise.all([
-      sb.from("individuals").select("*", { count: "exact", head: true }),
-      sb.from("family_forms").select("*", { count: "exact", head: true }),
-      sb.from("individuals").select("*", { count: "exact", head: true }).eq("political_leaning", "مؤيد"),
-      sb.from("individuals").select("*", { count: "exact", head: true }).eq("is_military", true),
-      sb.from("individuals").select("*", { count: "exact", head: true }).eq("has_voted", true),
-    ]);
+  const [
+    { count: individuals },
+    { count: families },
+    { count: supporters },
+    { count: military },
+    { count: voted },
+    { count: deceased },
+  ] = await Promise.all([
+    sb.from("individuals").select("*", { count: "exact", head: true }),
+    sb.from("family_forms").select("*", { count: "exact", head: true }),
+    sb.from("individuals").select("*", { count: "exact", head: true }).eq("political_leaning", "مؤيد"),
+    sb.from("individuals").select("*", { count: "exact", head: true }).eq("is_military", true),
+    sb.from("individuals").select("*", { count: "exact", head: true }).eq("has_voted", true),
+    sb.from("individuals").select("*", { count: "exact", head: true }).ilike("preferred_candidate", "%متوف%"),
+  ]);
+
+  const totalPeople = individuals ?? 0;
+  const deceasedCount = deceased ?? 0;
+
   return {
-    individuals: individuals ?? 0,
+    individuals: totalPeople,
     families: families ?? 0,
     supporters: supporters ?? 0,
     military: military ?? 0,
     voted: voted ?? 0,
+    deceased: deceasedCount,
+    living: Math.max(0, totalPeople - deceasedCount),
   };
 }
 

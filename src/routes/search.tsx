@@ -13,6 +13,10 @@ export const Route = createFileRoute("/search")({
   component: SearchPage,
 });
 
+function personLabel(person: Pick<Individual, "first_name" | "last_name">) {
+  return `${person.first_name} ${person.last_name}`.trim();
+}
+
 function SearchPage() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<(Individual & { family: FamilyForm }) | null>(null);
@@ -40,8 +44,17 @@ function SearchPage() {
     if (selectedRelation === "زوجة" || selectedRelation === "والدة") {
       return relation === "زوج" || relation === "رب العائلة";
     }
-    return relation === "زوج" || relation === "زوجة";
+    // Parentage fallback: share children
+    return family.some(
+      (child) =>
+        child.id !== selected.id &&
+        child.id !== member.id &&
+        ((child.father_name === selected.first_name && child.mother_name === member.first_name) ||
+          (child.mother_name === selected.first_name && child.father_name === member.first_name)),
+    );
   });
+
+  const selectedIsWife = normalizeRelation(selected?.relation) === "زوجة";
 
   return (
     <div className="space-y-6">
@@ -94,7 +107,8 @@ function SearchPage() {
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      أب: {r.father_name || "—"} · أم: {r.mother_name || "—"} · {r.family?.registry_town || "—"}
+                      {r.first_name} {r.father_name || "—"} {r.last_name} · سجل {r.family?.registry_number || "—"} ·{" "}
+                      {r.family?.registry_town || "—"}
                     </div>
                   </div>
                   <span className="text-xs text-muted-foreground">استمارة #{r.family_form_id}</span>
@@ -112,40 +126,76 @@ function SearchPage() {
               <h2 className="font-bold text-xl">الملف الشخصي</h2>
               <div className="flex flex-wrap gap-2">
                 {selected.is_military && (
-                  <span className="chip !bg-destructive !text-destructive-foreground">
-                    ⚠️ عسكري — لا يحق له الاقتراع
-                  </span>
+                  <span className="chip !bg-destructive !text-destructive-foreground">عسكري — لا يحق له الاقتراع</span>
                 )}
                 <Link to="/families/$id" params={{ id: String(selected.family_form_id) }} className="btn-ghost">
                   تعديل الاستمارة
                 </Link>
               </div>
             </div>
-            <div className="text-3xl font-black mb-4">
+            <div className="text-3xl font-black mb-1">
               {selected.first_name} {selected.last_name}
             </div>
+            <div className="text-sm text-muted-foreground mb-4">
+              {selected.first_name} {selected.father_name || "—"} {selected.last_name}
+            </div>
             <dl className="grid grid-cols-2 gap-3 text-sm">
+              <Info label="رقم السجل" v={selected.family?.registry_number} />
               <Info label="صلة القرابة" v={normalizeRelation(selected.relation) || selected.relation} />
+              <Info label="الشهرة / العائلة" v={selected.last_name} />
               <Info
                 label="الزوج / الزوجة"
-                v={spouse ? `${spouse.first_name} ${spouse.last_name}` : "غير مسجّل في الاستمارة"}
+                v={spouse ? personLabel(spouse) : "غير مسجّل في الاستمارة"}
               />
+              {spouse && normalizeRelation(spouse.relation) === "زوجة" && (
+                <Info label="عائلة الزوجة" v={spouse.last_name} />
+              )}
+              {selectedIsWife && <Info label="عائلتها (قبل الزواج)" v={selected.last_name} />}
               <Info label="اسم الأب" v={selected.father_name} />
               <Info label="اسم الأم" v={selected.mother_name} />
               <Info label="التولد" v={selected.birth_year?.toString()} />
               <Info label="الجوال" v={selected.mobile} />
               <Info label="الوضع العائلي" v={selected.marital_status} />
               <Info label="وضع الناخب" v={selected.voter_status} />
-              <Info label="السكن مع الأهل" v={selected.lives_with_family ? "نعم" : "لا"} />
+              <Info label="السكن مع الأهل" v={selected.lives_with_family == null ? null : selected.lives_with_family ? "نعم" : "لا"} />
+              <Info label="عسكري" v={selected.is_military ? "نعم" : "لا"} />
+              <Info label="اقترع" v={selected.has_voted ? "نعم" : "لا"} />
               <Info label="الميول السياسية" v={selected.political_leaning} />
               <Info label="الصوت التفضيلي" v={selected.preferred_candidate} />
+              <Info label="المذهب" v={selected.family?.sect} />
               <div className="col-span-2">
                 <Info label="السكن الفعلي" v={selected.current_residence} />
               </div>
               <div className="col-span-2">
                 <Info
                   label="بلدة النفوس / القضاء"
-                  v={`${selected.family?.registry_town ?? ""} — ${selected.family?.registry_district ?? ""}`}
+                  v={`${selected.family?.registry_town ?? "—"} — ${selected.family?.registry_district ?? "—"}`}
+                />
+              </div>
+              <div className="col-span-2">
+                <Info
+                  label="سكن الشتاء"
+                  v={[
+                    selected.family?.winter_town,
+                    selected.family?.winter_district,
+                    selected.family?.winter_governorate,
+                    selected.family?.winter_country,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                />
+              </div>
+              <div className="col-span-2">
+                <Info
+                  label="سكن الصيف"
+                  v={[
+                    selected.family?.summer_town,
+                    selected.family?.summer_district,
+                    selected.family?.summer_governorate,
+                    selected.family?.summer_country,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 />
               </div>
             </dl>
@@ -154,7 +204,7 @@ function SearchPage() {
           <div className="card-elev p-6">
             <h2 className="font-bold text-xl mb-4">شجرة العائلة</h2>
             {!family && <div className="text-sm text-muted-foreground">جاري التحميل...</div>}
-            {family && <FamilyTree members={family} focusId={selected.id} />}
+            {family && <FamilyTree members={family} focus={selected} />}
           </div>
         </div>
       )}
@@ -171,26 +221,80 @@ function Info({ label, v }: { label: string; v?: string | null }) {
   );
 }
 
-function FamilyTree({ members, focusId }: { members: Individual[]; focusId: number }) {
-  const groupedIds = new Set<number>();
+function FamilyTree({ members, focus }: { members: Individual[]; focus: Individual }) {
+  const used = new Set<number>([focus.id]);
 
-  const makeGroup = (title: string, relations: string[]) => {
-    const list = members.filter((m) => relations.includes(normalizeRelation(m.relation)));
-    list.forEach((m) => groupedIds.add(m.id));
-    return [title, list] as const;
+  const take = (list: Individual[]) => {
+    const unique = list.filter((m) => !used.has(m.id));
+    unique.forEach((m) => used.add(m.id));
+    return unique;
   };
 
-  const groups = [
-    makeGroup("رب العائلة", ["رب العائلة"]),
-    makeGroup("الزوج / الزوجة", ["زوج", "زوجة"]),
-    makeGroup("الأب / الأم", ["والد", "والدة"]),
-    makeGroup("الأبناء", ["ابن", "ابنة"]),
-  ];
+  // True children of focus: they list focus as أب or أم
+  const children = take(
+    members.filter(
+      (m) => m.id !== focus.id && (m.father_name === focus.first_name || m.mother_name === focus.first_name),
+    ),
+  );
+  const childNames = new Set(children.map((c) => c.first_name));
 
-  const others = members.filter((m) => !groupedIds.has(m.id));
-  if (others.length) {
-    groups.push(["أفراد آخرون", others]);
-  }
+  // Spouse of focus: co-parent of focus's children, or stored زوج/زوجة
+  const spouseByKids = members.find((m) => {
+    if (m.id === focus.id || used.has(m.id)) return false;
+    return children.some(
+      (child) =>
+        (child.father_name === focus.first_name && child.mother_name === m.first_name) ||
+        (child.mother_name === focus.first_name && child.father_name === m.first_name),
+    );
+  });
+  const spouseByRelation = members.find((m) => {
+    if (m.id === focus.id || used.has(m.id)) return false;
+    const relation = normalizeRelation(m.relation);
+    const focusRelation = normalizeRelation(focus.relation);
+    if (focusRelation === "زوج" || focusRelation === "رب العائلة" || focusRelation === "والد") {
+      return relation === "زوجة";
+    }
+    if (focusRelation === "زوجة" || focusRelation === "والدة") {
+      return relation === "زوج" || relation === "رب العائلة";
+    }
+    return false;
+  });
+  const spouses = take([spouseByKids, spouseByRelation].filter(Boolean) as Individual[]);
+
+  // In-laws: married to children of focus (كنة / صهر) — NOT children themselves
+  const inLaws = take(
+    members.filter((m) => {
+      if (m.id === focus.id) return false;
+      const rel = normalizeRelation(m.relation);
+      if (rel === "كنة" || rel === "صهر") return true;
+      // Parent of a grandchild whose other parent is focus's child
+      return members.some(
+        (kid) =>
+          kid.id !== m.id &&
+          ((kid.mother_name === m.first_name && kid.father_name && childNames.has(kid.father_name)) ||
+            (kid.father_name === m.first_name && kid.mother_name && childNames.has(kid.mother_name))),
+      );
+    }),
+  );
+
+  const parents = take(
+    members.filter((m) => {
+      const rel = normalizeRelation(m.relation);
+      return rel === "والد" || rel === "والدة" || m.first_name === focus.father_name || m.first_name === focus.mother_name;
+    }),
+  );
+
+  const head = take(members.filter((m) => normalizeRelation(m.relation) === "رب العائلة" && m.id !== focus.id));
+  const others = take(members.filter((m) => m.id !== focus.id));
+
+  const groups: Array<[string, Individual[]]> = [
+    ["رب العائلة", head],
+    ["الزوج / الزوجة", spouses],
+    ["الأب / الأم", parents],
+    ["الأبناء", children],
+    ["أزواج الأولاد", inLaws],
+    ["أفراد آخرون", others],
+  ];
 
   if (members.length === 0) {
     return <div className="text-sm text-muted-foreground">لا يوجد أفراد مسجّلون في هذه الاستمارة.</div>;
@@ -207,7 +311,7 @@ function FamilyTree({ members, focusId }: { members: Individual[]; focusId: numb
                 <div
                   key={m.id}
                   className={`p-3 rounded-lg border flex items-center justify-between gap-2 ${
-                    m.id === focusId
+                    m.id === focus.id
                       ? "border-primary bg-primary/5"
                       : m.is_military
                         ? "border-destructive/30 bg-destructive/5"
@@ -216,13 +320,16 @@ function FamilyTree({ members, focusId }: { members: Individual[]; focusId: numb
                 >
                   <div className="min-w-0">
                     <div className="font-semibold text-sm">
-                      {m.first_name} {m.last_name}
-                      {m.id === focusId && (
+                      {personLabel(m)}
+                      {m.id === focus.id && (
                         <span className="chip mr-2 !bg-primary !text-primary-foreground">أنت هنا</span>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {normalizeRelation(m.relation) || m.relation || "غير محدد"}
+                      {title === "الزوج / الزوجة" && normalizeRelation(m.relation) === "زوجة"
+                        ? ` · عائلتها: ${m.last_name}`
+                        : ""}
                       {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
                     </div>
                   </div>

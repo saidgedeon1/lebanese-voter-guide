@@ -165,29 +165,29 @@ function assignRelations(people) {
   }
 
   const asFather = new Map();
-  const asMother = new Map();
   for (const p of people) {
     if (p.father_name) asFather.set(p.father_name, (asFather.get(p.father_name) || 0) + 1);
-    if (p.mother_name) asMother.set(p.mother_name, (asMother.get(p.mother_name) || 0) + 1);
   }
 
-  // On children's lines: الأب = الزوج, الأم = الزوجة
   let head =
     people
       .map((p) => ({ p, score: asFather.get(p.first_name) || 0 }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)[0]?.p || null;
 
-  const wives = people
-    .map((p) => ({ p, score: asMother.get(p.first_name) || 0 }))
-    .filter((x) => x.score > 0 && x.p !== head)
-    .sort((a, b) => b.score - a.score)
-    .map((x) => x.p);
-
   if (!head) head = people[0];
 
-  // Fallback: first non-sibling woman with different surname = wife
-  if (!wives.length) {
+  // Direct children of head (list him as father)
+  const directChildren = people.filter((p) => p !== head && p.father_name === head.first_name);
+  const childNames = new Set(directChildren.map((c) => c.first_name));
+
+  // Head's wife = mother of his direct children
+  const headWifeNames = new Set(
+    directChildren.map((c) => c.mother_name).filter(Boolean),
+  );
+
+  // Fallback wife: different surname, not a child
+  if (!headWifeNames.size) {
     const fallback = people.find(
       (p) =>
         p !== head &&
@@ -197,28 +197,92 @@ function assignRelations(people) {
         p.last_name !== head.last_name &&
         !(asFather.get(p.first_name) > 0),
     );
-    if (fallback) wives.push(fallback);
+    if (fallback) headWifeNames.add(fallback.first_name);
   }
-
-  const wifeSet = new Set(wives);
 
   for (const p of people) {
     if (p === head) {
       p.relation = "رب العائلة";
       continue;
     }
-    if (wifeSet.has(p)) {
-      p.relation = "زوجة";
-      continue;
-    }
 
-    // Parent of the husband living in household (not a wife of children)
-    if (head && p.first_name === head.mother_name && !wifeSet.has(p)) {
+    // Parents of head living in household
+    if (p.first_name === head.mother_name) {
       p.relation = "والدة";
       continue;
     }
-    if (head && p.first_name === head.father_name && p !== head) {
+    if (p.first_name === head.father_name) {
       p.relation = "والد";
+      continue;
+    }
+
+    // Direct child of head
+    if (p.father_name === head.first_name) {
+      p.relation = isFemaleName(p.first_name) ? "ابنة" : "ابن";
+      continue;
+    }
+
+    // Head's wife: mother of his children
+    if (
+      headWifeNames.has(p.first_name) &&
+      directChildren.some((c) => c.mother_name === p.first_name)
+    ) {
+      p.relation = "زوجة";
+      continue;
+    }
+    if (headWifeNames.has(p.first_name) && !childNames.has(p.first_name)) {
+      // fallback wife without shared kids yet
+      const isChildOfHead = p.father_name === head.first_name;
+      if (!isChildOfHead) {
+        p.relation = "زوجة";
+        continue;
+      }
+    }
+
+    // Daughter-in-law (كنة): mother of kids whose father is a child of head
+    const isDaughterInLaw = people.some(
+      (kid) =>
+        kid.mother_name === p.first_name &&
+        kid.father_name &&
+        childNames.has(kid.father_name) &&
+        kid.father_name !== head.first_name,
+    );
+    if (isDaughterInLaw) {
+      p.relation = "كنة";
+      continue;
+    }
+
+    // Son-in-law (صهر): father of kids whose mother is a child of head
+    const isSonInLaw = people.some(
+      (kid) =>
+        kid.father_name === p.first_name &&
+        kid.mother_name &&
+        childNames.has(kid.mother_name) &&
+        kid.mother_name !== head.first_name,
+    );
+    if (isSonInLaw) {
+      p.relation = "صهر";
+      continue;
+    }
+
+    // Also detect in-law without grandchildren: married surname pattern /
+    // person whose spouse is a child (co-listed) — soft: female not child of head with different family
+    if (
+      isFemaleName(p.first_name) &&
+      p.father_name !== head.first_name &&
+      !headWifeNames.has(p.first_name) &&
+      p.last_name &&
+      head.last_name &&
+      p.last_name !== head.last_name &&
+      !shareParents(p, head)
+    ) {
+      // Likely daughter-in-law living with family (maiden surname kept)
+      p.relation = "كنة";
+      continue;
+    }
+
+    if (shareParents(p, head)) {
+      p.relation = isFemaleName(p.first_name) ? "ابنة" : "ابن";
       continue;
     }
 

@@ -15,8 +15,8 @@ export const Route = createFileRoute("/search")({
   component: SearchPage,
 });
 
-function personLabel(person: Pick<Individual, "first_name" | "last_name">) {
-  return `${person.first_name} ${person.last_name}`.trim();
+function personLabel(person: Pick<Individual, "first_name" | "last_name" | "father_name">) {
+  return [person.first_name, person.father_name, person.last_name].filter(Boolean).join(" ").trim();
 }
 
 function SearchPage() {

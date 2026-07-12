@@ -340,7 +340,9 @@ function IndividualsList() {
                   label="الزوج / الزوجة"
                   v={
                     spouseFromFamily
-                      ? `${spouseFromFamily.first_name} ${spouseFromFamily.last_name}`
+                      ? [spouseFromFamily.first_name, spouseFromFamily.father_name, spouseFromFamily.last_name]
+                          .filter(Boolean)
+                          .join(" ")
                       : viewing.spouse_name || "غير مسجّل"
                   }
                 />

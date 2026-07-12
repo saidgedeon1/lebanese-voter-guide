@@ -384,7 +384,9 @@ export async function listIndividuals(filters: {
     return {
       ...row,
       relation: normalizeRelation(row.relation) || row.relation,
-      spouse_name: spouse ? `${spouse.first_name} ${spouse.last_name}`.trim() : null,
+      spouse_name: spouse
+        ? [spouse.first_name, spouse.father_name, spouse.last_name].filter(Boolean).join(" ").trim()
+        : null,
     };
   });
 }

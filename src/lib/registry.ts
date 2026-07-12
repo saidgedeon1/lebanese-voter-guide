@@ -250,3 +250,54 @@ export async function createFamilyWithIndividuals(
   }
   return fam as FamilyForm;
 }
+
+export async function getFamilyById(id: number) {
+  const { data, error } = await sb
+    .from("family_forms")
+    .select("*, individuals(*)")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  return toFamilySummary(data as FamilyForm & { individuals?: Individual[] | null });
+}
+
+export async function updateFamilyForm(
+  id: number,
+  family: Omit<FamilyForm, "id" | "created_at">,
+) {
+  const { data, error } = await sb.from("family_forms").update(family).eq("id", id).select().single();
+  if (error) throw error;
+  return data as FamilyForm;
+}
+
+export async function deleteFamilyForm(id: number) {
+  const { error } = await sb.from("family_forms").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function updateIndividual(
+  id: number,
+  individual: Omit<Individual, "id" | "family_form_id"> & { family_form_id?: number },
+) {
+  const { data, error } = await sb.from("individuals").update(individual).eq("id", id).select().single();
+  if (error) throw error;
+  return data as Individual;
+}
+
+export async function deleteIndividual(id: number) {
+  const { error } = await sb.from("individuals").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function addIndividualToFamily(
+  family_form_id: number,
+  individual: Omit<Individual, "id" | "family_form_id">,
+) {
+  const { data, error } = await sb
+    .from("individuals")
+    .insert({ ...individual, family_form_id })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Individual;
+}

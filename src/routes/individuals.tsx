@@ -1,31 +1,55 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { listIndividuals, POLITICAL_OPTIONS } from "@/lib/registry";
+import { deleteIndividual, listIndividuals, POLITICAL_OPTIONS } from "@/lib/registry";
 
 export const Route = createFileRoute("/individuals")({
   component: IndividualsList,
 });
 
 function IndividualsList() {
+  const queryClient = useQueryClient();
   const [residence, setResidence] = useState("");
   const [political, setPolitical] = useState("");
   const [town, setTown] = useState("");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["individuals", residence, political, town],
     queryFn: () => listIndividuals({ residence, political, town }),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: number) => deleteIndividual(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["family-summaries"] }),
+        queryClient.invalidateQueries({ queryKey: ["individuals"] }),
+      ]);
+      await refetch();
+    },
   });
 
   const exportCsv = () => {
     if (!data) return;
     const headers = ["#", "الاسم", "الشهرة", "اسم الأب", "الميول", "السكن الحالي", "بلدة النفوس", "الجوال", "عسكري", "اقترع"];
     const rows = data.map((r) => [
-      r.id, r.first_name, r.last_name, r.father_name ?? "", r.political_leaning ?? "",
-      r.current_residence ?? "", r.family?.registry_town ?? "", r.mobile ?? "",
-      r.is_military ? "نعم" : "لا", r.has_voted ? "نعم" : "لا",
+      r.id,
+      r.first_name,
+      r.last_name,
+      r.father_name ?? "",
+      r.political_leaning ?? "",
+      r.current_residence ?? "",
+      r.family?.registry_town ?? "",
+      r.mobile ?? "",
+      r.is_military ? "نعم" : "لا",
+      r.has_voted ? "نعم" : "لا",
     ]);
-    const csv = "\uFEFF" + [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv =
+      "\uFEFF" +
+      [headers, ...rows]
+        .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+        .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -38,7 +62,7 @@ function IndividualsList() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">قائمة الأفراد</h1>
-          <p className="text-sm text-muted-foreground mt-1">فرز شامل مع تصدير إلى CSV.</p>
+          <p className="text-sm text-muted-foreground mt-1">فرز شامل، تعديل، حذف، وتصدير إلى CSV.</p>
         </div>
         <button className="btn-primary" onClick={exportCsv} disabled={!data?.length}>
           تصدير CSV ↓
@@ -54,7 +78,9 @@ function IndividualsList() {
           <label className="label-ar">الميول السياسية</label>
           <select className="field" value={political} onChange={(e) => setPolitical(e.target.value)}>
             <option value="">— الكل —</option>
-            {POLITICAL_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+            {POLITICAL_OPTIONS.map((o) => (
+              <option key={o}>{o}</option>
+            ))}
           </select>
         </div>
         <div>
@@ -75,30 +101,48 @@ function IndividualsList() {
                 <th className="p-3 font-semibold">السكن الحالي</th>
                 <th className="p-3 font-semibold">الميول</th>
                 <th className="p-3 font-semibold">الحالة</th>
+                <th className="p-3 font-semibold">إجراءات</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">جاري التحميل...</td></tr>
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                    جاري التحميل...
+                  </td>
+                </tr>
               )}
               {!isLoading && data?.length === 0 && (
-                <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">لا توجد نتائج</td></tr>
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                    لا توجد نتائج
+                  </td>
+                </tr>
               )}
               {data?.map((r) => (
                 <tr key={r.id} className={`border-t border-border ${r.is_military ? "bg-destructive/5" : ""}`}>
                   <td className="p-3 text-muted-foreground">{r.id}</td>
                   <td className="p-3">
-                    <div className="font-semibold">{r.first_name} {r.last_name}</div>
+                    <div className="font-semibold">
+                      {r.first_name} {r.last_name}
+                    </div>
                     <div className="text-xs text-muted-foreground">ابن {r.father_name || "—"}</div>
                   </td>
                   <td className="p-3">{r.relation}</td>
                   <td className="p-3">{r.family?.registry_town || "—"}</td>
                   <td className="p-3 text-muted-foreground">{r.current_residence || "—"}</td>
                   <td className="p-3">
-                    <span className={`chip ${
-                      r.political_leaning === "مؤيد" ? "!bg-success !text-success-foreground" :
-                      r.political_leaning === "معارض" ? "!bg-destructive !text-destructive-foreground" : ""
-                    }`}>{r.political_leaning || "—"}</span>
+                    <span
+                      className={`chip ${
+                        r.political_leaning === "مؤيد"
+                          ? "!bg-success !text-success-foreground"
+                          : r.political_leaning === "معارض"
+                            ? "!bg-destructive !text-destructive-foreground"
+                            : ""
+                      }`}
+                    >
+                      {r.political_leaning || "—"}
+                    </span>
                   </td>
                   <td className="p-3">
                     {r.is_military ? (
@@ -109,12 +153,38 @@ function IndividualsList() {
                       <span className="chip">لم يقترع</span>
                     )}
                   </td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        to="/families/$id"
+                        params={{ id: String(r.family_form_id) }}
+                        className="text-primary font-semibold hover:underline"
+                      >
+                        تعديل
+                      </Link>
+                      <button
+                        type="button"
+                        className="text-destructive font-semibold hover:underline"
+                        disabled={remove.isPending}
+                        onClick={() => {
+                          if (window.confirm(`متأكد بدك تمسح ${r.first_name} ${r.last_name}؟`)) {
+                            remove.mutate(r.id);
+                          }
+                        }}
+                      >
+                        حذف
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+      {remove.error && (
+        <div className="card-elev p-4 text-destructive text-sm">{(remove.error as Error).message}</div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
-import { fetchStats, listFamilySummaries, POLITICAL_OPTIONS, type FamilySummary } from "@/lib/registry";
+import {
+  deleteFamilyForm,
+  fetchStats,
+  listFamilySummaries,
+  POLITICAL_OPTIONS,
+  type FamilySummary,
+} from "@/lib/registry";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -46,9 +52,46 @@ function formatAgeSummary(family: FamilySummary) {
   return `${family.age_average} / ${family.age_min ?? family.age_average}-${family.age_max ?? family.age_average}`;
 }
 
-function FamilyDetails({ family }: { family: FamilySummary }) {
+function FamilyDetails({
+  family,
+  onDeleted,
+}: {
+  family: FamilySummary;
+  onDeleted?: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteFamilyForm(family.id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["family-summaries"] }),
+        queryClient.invalidateQueries({ queryKey: ["individuals"] }),
+      ]);
+      onDeleted?.();
+    },
+  });
+
   return (
     <div className="border-t border-border bg-muted/20 p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Link to="/families/$id" params={{ id: String(family.id) }} className="btn-primary">
+          تعديل الاستمارة
+        </Link>
+        <button
+          type="button"
+          className="btn-ghost !text-destructive"
+          disabled={deleteMutation.isPending}
+          onClick={() => {
+            if (window.confirm("متأكد بدك تمسح هالاستمارة مع كل أفرادها؟")) {
+              deleteMutation.mutate();
+            }
+          }}
+        >
+          {deleteMutation.isPending ? "جاري الحذف..." : "حذف الاستمارة"}
+        </button>
+      </div>
+
       <div className="grid gap-3 md:grid-cols-4">
         <FamilyMetric label="أعمار العائلة" value={formatAgeSummary(family)} />
         <FamilyMetric label="0-20 سنة" value={family.age_0_20} />
@@ -73,6 +116,7 @@ function FamilyDetails({ family }: { family: FamilySummary }) {
               <th className="p-3 font-semibold">العمر</th>
               <th className="p-3 font-semibold">الميول</th>
               <th className="p-3 font-semibold">السكن</th>
+              <th className="p-3 font-semibold">إجراء</th>
             </tr>
           </thead>
           <tbody>
@@ -88,12 +132,20 @@ function FamilyDetails({ family }: { family: FamilySummary }) {
                   <td className="p-3">{age ?? "—"}</td>
                   <td className="p-3">{member.political_leaning || "—"}</td>
                   <td className="p-3 text-muted-foreground">{member.current_residence || "—"}</td>
+                  <td className="p-3">
+                    <Link to="/families/$id" params={{ id: String(family.id) }} className="text-primary font-semibold hover:underline">
+                      تعديل
+                    </Link>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      {deleteMutation.error && (
+        <div className="mt-3 text-sm text-destructive">{(deleteMutation.error as Error).message}</div>
+      )}
     </div>
   );
 }
@@ -265,7 +317,7 @@ function Dashboard() {
                   <th className="p-3 font-semibold">الذكور</th>
                   <th className="p-3 font-semibold">الإناث</th>
                   <th className="p-3 font-semibold">الأعمار</th>
-                  <th className="p-3 font-semibold">التفاصيل</th>
+                  <th className="p-3 font-semibold">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -308,22 +360,35 @@ function Dashboard() {
                         <td className="p-3">{family.female_count.toLocaleString("ar-EG")}</td>
                         <td className="p-3">{formatAgeSummary(family)}</td>
                         <td className="p-3">
-                          <button
-                            type="button"
-                            className="btn-ghost"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setExpandedFamilyId(isExpanded ? null : family.id);
-                            }}
-                          >
-                            {isExpanded ? "إخفاء" : "عرض"}
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setExpandedFamilyId(isExpanded ? null : family.id);
+                              }}
+                            >
+                              {isExpanded ? "إخفاء" : "عرض"}
+                            </button>
+                            <Link
+                              to="/families/$id"
+                              params={{ id: String(family.id) }}
+                              className="btn-primary"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              تعديل
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                       {isExpanded && (
                         <tr className="border-t border-border">
                           <td colSpan={8} className="p-0">
-                            <FamilyDetails family={family} />
+                            <FamilyDetails
+                              family={family}
+                              onDeleted={() => setExpandedFamilyId(null)}
+                            />
                           </td>
                         </tr>
                       )}

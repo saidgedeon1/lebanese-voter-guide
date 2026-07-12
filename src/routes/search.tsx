@@ -248,7 +248,7 @@ function FamilyTree({ members, focus }: { members: Individual[]; focus: Individu
     );
   });
   const spouseByRelation = members.find((m) => {
-    if (m.id === focus.id || used.has(m.id)) return false;
+    if (m.id === focus.id || used.has(m.id) || (spouseByKids && m.id === spouseByKids.id)) return false;
     const relation = normalizeRelation(m.relation);
     const focusRelation = normalizeRelation(focus.relation);
     if (focusRelation === "زوج" || focusRelation === "رب العائلة" || focusRelation === "والد") {
@@ -259,7 +259,9 @@ function FamilyTree({ members, focus }: { members: Individual[]; focus: Individu
     }
     return false;
   });
-  const spouses = take([spouseByKids, spouseByRelation].filter(Boolean) as Individual[]);
+  const spouses = take(
+    [spouseByKids, spouseByRelation].filter((m): m is Individual => !!m).filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i),
+  );
 
   // In-laws: married to children of focus (كنة / صهر) — NOT children themselves
   const inLaws = take(

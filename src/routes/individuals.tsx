@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { PersonFilesPanel } from "@/components/PersonFilesPanel";
 import {
   deleteIndividual,
   displayMaritalStatus,
@@ -361,6 +362,14 @@ function IndividualsList() {
                 <div className="sm:col-span-2">
                   <Info label="السكن الفعلي" v={viewing.current_residence} />
                 </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <PersonFilesPanel
+                  personId={viewing.id}
+                  personName={`${viewing.first_name} ${viewing.last_name}`}
+                  compact
+                />
               </div>
 
               <div className="border-t border-border pt-4 space-y-3">

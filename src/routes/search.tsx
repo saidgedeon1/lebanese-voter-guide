@@ -10,6 +10,7 @@ import {
   type Individual,
   type FamilyForm,
 } from "@/lib/registry";
+import { PersonFilesPanel } from "@/components/PersonFilesPanel";
 
 export const Route = createFileRoute("/search")({
   component: SearchPage,
@@ -214,6 +215,13 @@ function SearchPage() {
                 />
               </div>
             </dl>
+
+            <div className="mt-6 pt-5 border-t border-border">
+              <PersonFilesPanel
+                personId={selected.id}
+                personName={`${selected.first_name} ${selected.last_name}`}
+              />
+            </div>
           </div>
 
           <div className="card-elev p-6">

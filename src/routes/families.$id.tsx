@@ -16,6 +16,7 @@ import {
   type Individual,
 } from "@/lib/registry";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
+import { PersonFilesPanel } from "@/components/PersonFilesPanel";
 
 type FamilyEditSearch = {
   member?: number;
@@ -622,6 +623,15 @@ function EditFamilyPage() {
                 setMembers((prev) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item)))
               }
             />
+            {member.id ? (
+              <div className="pt-4 border-t border-border">
+                <PersonFilesPanel
+                  personId={member.id}
+                  personName={`${member.first_name} ${member.last_name}`}
+                  compact
+                />
+              </div>
+            ) : null}
           </div>
         ))}
 

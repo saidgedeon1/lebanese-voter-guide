@@ -64,6 +64,21 @@ export const MARITAL_OPTIONS = ["متزوج", "أعزب", "مطلق", "أرمل"
 export const POLITICAL_OPTIONS = ["مؤيد", "معارض", "رمادي", "غير مهتم"] as const;
 export const VOTER_STATUS_OPTIONS = ["مقيم", "مغترب"] as const;
 
+/** Normalize Arabic letters so search matches أ/إ/آ and ة/ه variants. */
+export function normalizeArabic(input: string | null | undefined) {
+  return (input ?? "")
+    .normalize("NFKC")
+    .replace(/[إأآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/\u0640/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 /** Normalize common Lebanese spellings so spouses/parents still show in family views. */
 export function normalizeRelation(relation: string | null | undefined) {
   const value = (relation ?? "").trim();
@@ -205,22 +220,29 @@ export async function listIndividuals(filters: {
   }
 
   if (filters.search?.trim()) {
-    const needle = filters.search.trim().toLowerCase();
-    rows = rows.filter((r) =>
-      [
-        r.first_name,
-        r.last_name,
-        r.father_name ?? "",
-        r.mother_name ?? "",
-        r.relation,
-        r.mobile ?? "",
-        r.family?.registry_number ?? "",
-        r.family?.registry_town ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle),
-    );
+    const needle = normalizeArabic(filters.search);
+    const tokens = needle.split(/\s+/).filter(Boolean);
+    rows = rows.filter((r) => {
+      const first = normalizeArabic(r.first_name);
+      const father = normalizeArabic(r.father_name);
+      const last = normalizeArabic(r.last_name);
+      const mother = normalizeArabic(r.mother_name);
+      const blob = normalizeArabic(
+        [first, father, last, mother, `${first} ${father} ${last}`, r.relation, r.family?.registry_number ?? "", r.family?.registry_town ?? ""].join(
+          " ",
+        ),
+      );
+      if (tokens.length >= 3) {
+        const [a, b, c] = tokens;
+        if (first.includes(a) && father.includes(b) && last.includes(c)) return true;
+      }
+      if (tokens.length === 2) {
+        const [a, b] = tokens;
+        if (first.includes(a) && (last.includes(b) || father.includes(b))) return true;
+      }
+      if (tokens.length > 1 && tokens.every((token) => blob.includes(token))) return true;
+      return blob.includes(needle);
+    });
   }
 
   const byFamily = new Map<number, typeof rows>();
@@ -254,17 +276,53 @@ export async function listIndividuals(filters: {
 }
 
 export async function searchByName(name: string) {
-  if (!name.trim()) return [] as (Individual & { family: FamilyForm })[];
-  const like = `%${name.trim()}%`;
+  const raw = name.trim();
+  if (!raw) return [] as (Individual & { family: FamilyForm })[];
+  const needle = normalizeArabic(raw);
+  if (!needle) return [];
+  const tokens = needle.split(/\s+/).filter(Boolean);
+
   const { data, error } = await sb
     .from("individuals")
     .select("*, family:family_forms(*)")
-    .or(
-      `first_name.ilike.${like},last_name.ilike.${like},father_name.ilike.${like},mother_name.ilike.${like},relation.ilike.${like}`,
-    )
-    .limit(100);
+    .order("id", { ascending: false })
+    .limit(5000);
   if (error) throw error;
-  return (data ?? []) as (Individual & { family: FamilyForm })[];
+
+  return ((data ?? []) as (Individual & { family: FamilyForm })[])
+    .filter((row) => {
+      const first = normalizeArabic(row.first_name);
+      const father = normalizeArabic(row.father_name);
+      const last = normalizeArabic(row.last_name);
+      const mother = normalizeArabic(row.mother_name);
+      const triple = `${first} ${father} ${last}`.trim();
+      const duo = `${first} ${last}`.trim();
+      const blob = normalizeArabic(
+        [first, father, last, mother, duo, triple, row.relation, row.family?.registry_town ?? "", row.family?.registry_number ?? ""].join(
+          " ",
+        ),
+      );
+
+      // الاسم الثلاثي: الاسم + اسم الأب + الشهرة
+      if (tokens.length >= 3) {
+        const [a, b, c] = tokens;
+        if (first.includes(a) && father.includes(b) && last.includes(c)) return true;
+        if (triple.includes(tokens.slice(0, 3).join(" "))) return true;
+      }
+
+      // اسم + شهرة أو اسم + أب
+      if (tokens.length === 2) {
+        const [a, b] = tokens;
+        if (first.includes(a) && (last.includes(b) || father.includes(b))) return true;
+        if (duo.includes(needle) || `${first} ${father}`.includes(needle)) return true;
+      }
+
+      // كل الكلمات موجودة (مو شرط ورا بعض)
+      if (tokens.length > 1 && tokens.every((token) => blob.includes(token))) return true;
+
+      return blob.includes(needle);
+    })
+    .slice(0, 150);
 }
 
 export async function getFamilyMembers(family_form_id: number) {
@@ -295,7 +353,7 @@ export async function listFamilySummaries(filters: {
   const { data, error } = await q;
   if (error) throw error;
 
-  const search = filters.search?.trim().toLowerCase();
+  const search = normalizeArabic(filters.search);
 
   return ((data ?? []) as Array<FamilyForm & { individuals?: Individual[] | null }>)
     .map(toFamilySummary)
@@ -323,7 +381,7 @@ export async function listFamilySummaries(filters: {
         ]),
       ];
 
-      return haystacks.some((value) => value.toLowerCase().includes(search));
+      return haystacks.some((value) => normalizeArabic(value).includes(search));
     });
 }
 

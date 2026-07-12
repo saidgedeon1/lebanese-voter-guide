@@ -228,7 +228,7 @@ function assignRelations(people) {
   return people;
 }
 
-function parseWorkbook(filePath, registryNumber) {
+function parseWorkbook(filePath, registryNumber, folderName = "") {
   const wb = XLSX.readFile(filePath);
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
@@ -252,6 +252,13 @@ function parseWorkbook(filePath, registryNumber) {
   if (colMother < 0) colMother = 8;
   if (colFather < 0) colFather = 10;
   if (colName < 0) colName = 12;
+
+  // Folder names are often "الاسم الأب الشهرة" — use last token when Excel has no surname.
+  const folderLast = String(folderName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .at(-1);
 
   const people = [];
   for (const row of rows.slice(1)) {
@@ -278,6 +285,7 @@ function parseWorkbook(filePath, registryNumber) {
   const familyLast =
     people.find((p) => p.last_name && people.filter((x) => x.last_name === p.last_name).length)?.last_name ||
     people.find((p) => p.last_name)?.last_name ||
+    folderLast ||
     "غير محدد";
 
   // Prefer the head-family surname for blank last names (not the wife's maiden name)
@@ -354,7 +362,7 @@ function collectForms() {
       for (const file of files) {
         const full = path.join(pdir, file);
         try {
-          const parsed = parseWorkbook(full, reg);
+          const parsed = parseWorkbook(full, reg, pd.name);
           if (!parsed) {
             skipped.push({ full, reason: "empty-or-wrong-format" });
             continue;

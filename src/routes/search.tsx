@@ -17,10 +17,10 @@ function SearchPage() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<(Individual & { family: FamilyForm }) | null>(null);
 
-  const { data: results, isFetching } = useQuery({
+  const { data: results, isFetching, error: searchError } = useQuery({
     queryKey: ["search", q],
     queryFn: () => searchByName(q),
-    enabled: q.trim().length > 1,
+    enabled: q.trim().length >= 1,
   });
 
   const { data: family } = useQuery({
@@ -48,7 +48,7 @@ function SearchPage() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-black">محرك البحث الذكي</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          ابحث بأي اسم لعرض الملف الشخصي وشجرة العائلة تلقائياً، بما فيها الزوج/الزوجة.
+          ابحث بالاسم، الشهرة، أو الاسم الثلاثي (الاسم + اسم الأب + العائلة).
         </p>
       </div>
 
@@ -57,7 +57,7 @@ function SearchPage() {
           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xl">🔍</span>
           <input
             className="field !pr-12 !py-4 !text-lg"
-            placeholder="اكتب اسم شخص، اسم عائلة، اسم أب، أو اسم أم..."
+            placeholder="اسم، اسم ثلاثي (الاسم الأب العائلة)، أو شهرة..."
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
@@ -67,10 +67,13 @@ function SearchPage() {
           />
         </div>
 
-        {q.trim().length > 1 && (
+        {q.trim().length >= 1 && (
           <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
             {isFetching && <div className="text-sm text-muted-foreground p-3">جاري البحث...</div>}
-            {!isFetching && results?.length === 0 && (
+            {searchError && (
+              <div className="text-sm text-destructive p-3">تعذّر البحث: {(searchError as Error).message}</div>
+            )}
+            {!isFetching && !searchError && results?.length === 0 && (
               <div className="text-sm text-muted-foreground p-3">لا توجد نتائج مطابقة.</div>
             )}
             {results?.map((r) => (

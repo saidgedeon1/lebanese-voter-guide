@@ -204,7 +204,17 @@ function SearchPage() {
           <div className="card-elev p-6">
             <h2 className="font-bold text-xl mb-4">شجرة العائلة</h2>
             {!family && <div className="text-sm text-muted-foreground">جاري التحميل...</div>}
-            {family && <FamilyTree members={family} focus={selected} />}
+            {family && (
+              <FamilyTree
+                members={family}
+                focus={selected}
+                onSelect={(member) => {
+                  if (member.id === selected.id) return;
+                  setSelected({ ...member, family: selected.family });
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              />
+            )}
           </div>
         </div>
       )}
@@ -221,7 +231,15 @@ function Info({ label, v }: { label: string; v?: string | null }) {
   );
 }
 
-function FamilyTree({ members, focus }: { members: Individual[]; focus: Individual }) {
+function FamilyTree({
+  members,
+  focus,
+  onSelect,
+}: {
+  members: Individual[];
+  focus: Individual;
+  onSelect: (member: Individual) => void;
+}) {
   const used = new Set<number>([focus.id]);
 
   const take = (list: Individual[]) => {
@@ -309,37 +327,46 @@ function FamilyTree({ members, focus }: { members: Individual[]; focus: Individu
           <div key={title}>
             <div className="text-xs font-bold text-muted-foreground mb-2">{title}</div>
             <div className="space-y-2">
-              {list.map((m) => (
-                <div
-                  key={m.id}
-                  className={`p-3 rounded-lg border flex items-center justify-between gap-2 ${
-                    m.id === focus.id
-                      ? "border-primary bg-primary/5"
-                      : m.is_military
-                        ? "border-destructive/30 bg-destructive/5"
-                        : "border-border"
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <div className="font-semibold text-sm">
-                      {personLabel(m)}
-                      {m.id === focus.id && (
-                        <span className="chip mr-2 !bg-primary !text-primary-foreground">أنت هنا</span>
-                      )}
+              {list.map((m) => {
+                const isFocus = m.id === focus.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    disabled={isFocus}
+                    onClick={() => onSelect(m)}
+                    className={`w-full text-right p-3 rounded-lg border flex items-center justify-between gap-2 transition ${
+                      isFocus
+                        ? "border-primary bg-primary/5 cursor-default"
+                        : m.is_military
+                          ? "border-destructive/30 bg-destructive/5 hover:bg-destructive/10 cursor-pointer"
+                          : "border-border hover:bg-muted cursor-pointer"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm">
+                        {personLabel(m)}
+                        {isFocus && (
+                          <span className="chip mr-2 !bg-primary !text-primary-foreground">أنت هنا</span>
+                        )}
+                        {!isFocus && (
+                          <span className="text-xs text-primary font-medium mr-2">عرض الملف ←</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {normalizeRelation(m.relation) || m.relation || "غير محدد"}
+                        {title === "الزوج / الزوجة" && normalizeRelation(m.relation) === "زوجة"
+                          ? ` · عائلتها: ${m.last_name}`
+                          : ""}
+                        {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {normalizeRelation(m.relation) || m.relation || "غير محدد"}
-                      {title === "الزوج / الزوجة" && normalizeRelation(m.relation) === "زوجة"
-                        ? ` · عائلتها: ${m.last_name}`
-                        : ""}
-                      {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
-                    </div>
-                  </div>
-                  {m.is_military && (
-                    <span className="chip !bg-destructive !text-destructive-foreground shrink-0">عسكري</span>
-                  )}
-                </div>
-              ))}
+                    {m.is_military && (
+                      <span className="chip !bg-destructive !text-destructive-foreground shrink-0">عسكري</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ),

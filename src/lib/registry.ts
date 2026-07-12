@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { nameFieldsMatch, nameTokenMatches } from "@/lib/name-search";
+import { nameFieldsMatch, nameTokenMatches, scoreNameSearch } from "@/lib/name-search";
 
 export type FamilyForm = {
   id: number;
@@ -450,6 +450,11 @@ export async function searchByName(name: string) {
         [row.relation, row.family?.registry_town ?? "", row.family?.registry_number ?? ""].join(" "),
       );
       return Boolean(needle) && blob.includes(needle);
+    })
+    .sort((a, b) => {
+      const scoreDiff = scoreNameSearch(b, tokens, raw) - scoreNameSearch(a, tokens, raw);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.first_name.localeCompare(b.first_name, "ar");
     })
     .slice(0, 150);
 }

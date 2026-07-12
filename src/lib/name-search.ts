@@ -243,8 +243,21 @@ export function expandSearchToken(token: string) {
   return [...out].filter(Boolean);
 }
 
+export function nameTokenExact(field: string | null | undefined, queryToken: string) {
+  if (!field?.trim() || !queryToken.trim()) return false;
+  const fieldNorm = normalizeArabic(field);
+  for (const variant of expandSearchToken(queryToken)) {
+    const variantNorm = normalizeArabic(variant);
+    if (variantNorm && fieldNorm === variantNorm) return true;
+  }
+  const qKey = phoneticKey(queryToken);
+  const fKey = phoneticKey(field);
+  return Boolean(qKey) && qKey === fKey;
+}
+
 export function nameTokenMatches(field: string | null | undefined, queryToken: string) {
   if (!field?.trim() || !queryToken.trim()) return false;
+  if (nameTokenExact(field, queryToken)) return true;
   const fieldNorm = normalizeArabic(field);
   for (const variant of expandSearchToken(queryToken)) {
     const variantNorm = normalizeArabic(variant);
@@ -255,10 +268,59 @@ export function nameTokenMatches(field: string | null | undefined, queryToken: s
   const qKey = phoneticKey(queryToken);
   const fKey = phoneticKey(field);
   if (qKey.length >= 2 && fKey.length >= 2) {
-    if (fKey === qKey) return true;
     if (qKey.length >= 3 && (fKey.includes(qKey) || qKey.includes(fKey))) return true;
   }
   return false;
+}
+
+/** Higher = better. Prefer people whose first name matches what the user typed first. */
+export function scoreNameSearch(
+  person: {
+    first_name?: string | null;
+    father_name?: string | null;
+    last_name?: string | null;
+    mother_name?: string | null;
+  },
+  tokens: string[],
+  raw: string,
+) {
+  if (!tokens.length) return 0;
+  const [a, b, c] = tokens;
+  let score = 0;
+
+  // Primary: first name vs first typed word
+  if (a) {
+    if (nameTokenExact(person.first_name, a)) score += 1000;
+    else if (nameTokenMatches(person.first_name, a)) score += 700;
+  }
+
+  if (tokens.length === 1 && a) {
+    if (nameTokenExact(person.last_name, a)) score += 120;
+    else if (nameTokenMatches(person.last_name, a)) score += 80;
+    if (nameTokenExact(person.father_name, a)) score += 60;
+    else if (nameTokenMatches(person.father_name, a)) score += 40;
+    if (nameTokenMatches(person.mother_name, a)) score += 20;
+  }
+
+  if (tokens.length === 2 && a && b) {
+    if (nameTokenExact(person.father_name, b)) score += 250;
+    else if (nameTokenMatches(person.father_name, b)) score += 180;
+    if (nameTokenExact(person.last_name, b)) score += 240;
+    else if (nameTokenMatches(person.last_name, b)) score += 170;
+    if (nameTokenMatches(person.last_name, `${a} ${b}`)) score += 200;
+  }
+
+  if (tokens.length >= 3 && a && b && c) {
+    if (nameTokenExact(person.father_name, b)) score += 250;
+    else if (nameTokenMatches(person.father_name, b)) score += 180;
+    if (nameTokenExact(person.last_name, c)) score += 250;
+    else if (nameTokenMatches(person.last_name, c)) score += 180;
+  }
+
+  // Full-string first-name exact (rare multi-word first names)
+  if (nameTokenExact(person.first_name, raw)) score += 50;
+
+  return score;
 }
 
 export function nameFieldsMatch(

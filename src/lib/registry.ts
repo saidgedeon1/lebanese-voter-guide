@@ -121,6 +121,11 @@ export function normalizeRelation(relation: string | null | undefined) {
 
 const MARRIED_RELATIONS = new Set(["رب العائلة", "زوج", "زوجة", "كنة", "صهر"]);
 
+function isMarriedStatus(status: string | null | undefined) {
+  const value = (status ?? "").trim();
+  return value === "متزوج" || value === "متزوجة";
+}
+
 /** Find spouse within the same form: by relation, co-parentage, then household head. */
 export function findSpouse(person: Individual, members: Individual[]): Individual | null {
   if (!person || !members?.length) return null;
@@ -157,10 +162,19 @@ export function findSpouse(person: Individual, members: Individual[]): Individua
   });
   if (byRelation) return byRelation;
 
-  // كنة without listed grandchildren: prefer the only son in the form
+  // كنة ↔ ابن متزوج when grandchildren are not listed on the form
   if (self === "كنة") {
     const sons = members.filter((m) => m.id !== person.id && normalizeRelation(m.relation) === "ابن");
+    const marriedSons = sons.filter((m) => isMarriedStatus(m.marital_status));
+    if (marriedSons.length === 1) return marriedSons[0];
     if (sons.length === 1) return sons[0];
+  }
+
+  if (self === "ابن" && isMarriedStatus(person.marital_status)) {
+    const daughtersInLaw = members.filter(
+      (m) => m.id !== person.id && normalizeRelation(m.relation) === "كنة",
+    );
+    if (daughtersInLaw.length === 1) return daughtersInLaw[0];
   }
 
   if (self === "زوجة" || self === "والدة") {

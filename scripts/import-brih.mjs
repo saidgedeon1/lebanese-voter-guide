@@ -371,19 +371,17 @@ function collectForms() {
 }
 
 async function deletePreviousBrihImport(sb) {
-  // Previous bulk import used sect=null for Brih/Chouf.
+  // Replace all prior Brih/Chouf imports (this village bulk load).
   const { data: families, error } = await sb
     .from("family_forms")
     .select("id")
     .eq("registry_town", "بريح")
-    .eq("registry_district", "الشوف")
-    .is("sect", null);
+    .eq("registry_district", "الشوف");
 
   if (error) throw error;
   const ids = (families || []).map((f) => f.id);
   if (!ids.length) return { deletedFamilies: 0 };
 
-  // individuals cascade may not exist — delete explicitly
   const { error: eInd } = await sb.from("individuals").delete().in("family_form_id", ids);
   if (eInd) throw eInd;
   const { error: eFam } = await sb.from("family_forms").delete().in("id", ids);

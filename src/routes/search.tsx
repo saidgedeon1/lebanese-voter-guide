@@ -153,7 +153,7 @@ function SearchPage() {
               {selectedIsWife && <Info label="عائلتها (قبل الزواج)" v={selected.last_name} />}
               <Info label="اسم الأب" v={selected.father_name} />
               <Info label="اسم الأم" v={selected.mother_name} />
-              <Info label="التولد" v={selected.birth_year?.toString()} />
+              <Info label="تاريخ الولادة" v={selected.birth_year?.toString()} />
               <Info label="الجوال" v={selected.mobile} />
               <Info label="الوضع العائلي" v={selected.marital_status} />
               <Info label="وضع الناخب" v={selected.voter_status} />

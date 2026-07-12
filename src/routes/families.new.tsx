@@ -102,7 +102,7 @@ function IndividualFields({
       <Field label="اسم الأم والشهرة قبل الزواج">
         <input className="field" value={ind.mother_name} onChange={(e) => onChange({ mother_name: e.target.value })} />
       </Field>
-      <Field label="التولد (سنة الولادة)">
+      <Field label="تاريخ الولادة (سنة الولادة)">
         <input
           className="field"
           inputMode="numeric"

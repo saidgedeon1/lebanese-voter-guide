@@ -355,7 +355,7 @@ function IndividualsList() {
                 <Info label="رقم السجل" v={viewing.family?.registry_number} />
                 <Info label="اسم الأب" v={viewing.father_name} />
                 <Info label="اسم الأم" v={viewing.mother_name} />
-                <Info label="التولد" v={viewing.birth_year?.toString()} />
+                <Info label="تاريخ الولادة" v={viewing.birth_year?.toString()} />
                 <Info label="الجوال" v={viewing.mobile} />
                 <Info label="الوضع العائلي" v={viewing.marital_status} />
                 <Info label="وضع الناخب" v={viewing.voter_status} />

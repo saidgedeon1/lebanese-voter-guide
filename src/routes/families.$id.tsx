@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   RELATION_OPTIONS,
   MARITAL_OPTIONS,
@@ -12,11 +12,28 @@ import {
   updateIndividual,
   deleteIndividual,
   addIndividualToFamily,
+  normalizeRelation,
   type Individual,
 } from "@/lib/registry";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
+type FamilyEditSearch = {
+  member?: number;
+  add?: boolean;
+};
+
 export const Route = createFileRoute("/families/$id")({
+  validateSearch: (search: Record<string, unknown>): FamilyEditSearch => {
+    const next: FamilyEditSearch = {};
+    if (search.member != null && search.member !== "") {
+      const member = Number(search.member);
+      if (Number.isFinite(member)) next.member = member;
+    }
+    if (search.add === true || search.add === "1" || search.add === "true") {
+      next.add = true;
+    }
+    return next;
+  },
   component: EditFamilyPage,
 });
 
@@ -229,6 +246,7 @@ function IndividualFields({
 
 function EditFamilyPage() {
   const { id } = Route.useParams();
+  const { member: focusMemberId, add: openAdd } = Route.useSearch();
   const familyId = Number(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -262,6 +280,7 @@ function EditFamilyPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [pendingDeleteMember, setPendingDeleteMember] = useState<IndividualDraft | null>(null);
   const [pendingDeleteFamily, setPendingDeleteFamily] = useState(false);
+  const deepLinkHandled = useRef(false);
 
   useEffect(() => {
     if (!data) return;
@@ -420,12 +439,41 @@ function EditFamilyPage() {
   useEffect(() => {
     if (!data) return;
     if (typeof window === "undefined") return;
+    if (deepLinkHandled.current) return;
+
+    if (openAdd) {
+      deepLinkHandled.current = true;
+      const last = data.members.find((m) => m.last_name)?.last_name || "";
+      const father =
+        data.members.find((m) => ["رب العائلة", "والد", "زوج"].includes(normalizeRelation(m.relation) || m.relation))
+          ?.first_name || "";
+      setNewMember(
+        emptyDraft("ابن", {
+          last_name: last,
+          father_name: father,
+        }),
+      );
+      requestAnimationFrame(() => {
+        document.getElementById("new-member-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+
+    if (focusMemberId) {
+      deepLinkHandled.current = true;
+      requestAnimationFrame(() => {
+        document.getElementById(`member-${focusMemberId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+
     if (window.location.hash === "#members") {
+      deepLinkHandled.current = true;
       requestAnimationFrame(() => {
         document.getElementById("members")?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
-  }, [data]);
+  }, [data, focusMemberId, openAdd]);
 
   if (isLoading) {
     return <div className="card-elev p-6 text-muted-foreground">جاري تحميل الاستمارة...</div>;
@@ -533,7 +581,13 @@ function EditFamilyPage() {
         )}
 
         {members.map((member, idx) => (
-          <div key={member.id ?? idx} className="card-elev p-5 sm:p-6 space-y-4">
+          <div
+            key={member.id ?? idx}
+            id={member.id ? `member-${member.id}` : undefined}
+            className={`card-elev p-5 sm:p-6 space-y-4 scroll-mt-24 ${
+              member.id && focusMemberId === member.id ? "border-2 border-primary ring-2 ring-primary/20" : ""
+            }`}
+          >
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="chip">{member.relation || "فرد"}</span>

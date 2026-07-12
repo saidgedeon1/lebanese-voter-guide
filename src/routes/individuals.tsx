@@ -265,6 +265,7 @@ function IndividualsList() {
                         <Link
                           to="/families/$id"
                           params={{ id: String(r.family_form_id) }}
+                          search={{}}
                           hash="members"
                           className="text-primary font-semibold hover:underline"
                         >
@@ -377,6 +378,7 @@ function IndividualsList() {
                 <Link
                   to="/families/$id"
                   params={{ id: String(viewing.family_form_id) }}
+                  search={{ member: viewing.id }}
                   hash="members"
                   className="btn-primary"
                   onClick={() => setViewing(null)}

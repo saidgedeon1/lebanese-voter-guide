@@ -78,7 +78,7 @@ function FamilyDetails({
   return (
     <div className="border-t border-border bg-muted/20 p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap gap-2">
-        <Link to="/families/$id" params={{ id: String(family.id) }} className="btn-primary">
+        <Link to="/families/$id" params={{ id: String(family.id) }} search={{}} className="btn-primary">
           تعديل الاستمارة
         </Link>
         <button
@@ -142,7 +142,7 @@ function FamilyDetails({
                   <td className="p-3">{member.political_leaning || "—"}</td>
                   <td className="p-3 text-muted-foreground">{member.current_residence || "—"}</td>
                   <td className="p-3">
-                    <Link to="/families/$id" params={{ id: String(family.id) }} className="text-primary font-semibold hover:underline">
+                    <Link to="/families/$id" params={{ id: String(family.id) }} search={{}} className="text-primary font-semibold hover:underline">
                       تعديل
                     </Link>
                   </td>
@@ -385,6 +385,7 @@ function Dashboard() {
                             <Link
                               to="/families/$id"
                               params={{ id: String(family.id) }}
+                              search={{}}
                               className="btn-primary"
                               onClick={(event) => event.stopPropagation()}
                             >

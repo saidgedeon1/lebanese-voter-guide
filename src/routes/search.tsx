@@ -111,9 +111,6 @@ function SearchPage() {
                 {selected.is_military && (
                   <span className="chip !bg-destructive !text-destructive-foreground">عسكري — لا يحق له الاقتراع</span>
                 )}
-                <Link to="/families/$id" params={{ id: String(selected.family_form_id) }} className="btn-ghost">
-                  تعديل الاستمارة
-                </Link>
               </div>
             </div>
             <div className="text-3xl font-black mb-1">
@@ -121,6 +118,33 @@ function SearchPage() {
             </div>
             <div className="text-sm text-muted-foreground mb-4">
               {selected.first_name} {selected.father_name || "—"} {selected.last_name}
+            </div>
+            <div className="flex flex-wrap gap-2 mb-5">
+              <Link
+                to="/families/$id"
+                params={{ id: String(selected.family_form_id) }}
+                search={{ member: selected.id }}
+                className="btn-primary"
+              >
+                تعديل هذا الفرد
+              </Link>
+              <Link
+                to="/families/$id"
+                params={{ id: String(selected.family_form_id) }}
+                search={{ add: true }}
+                className="btn-primary"
+              >
+                + إضافة فرد
+              </Link>
+              <Link
+                to="/families/$id"
+                params={{ id: String(selected.family_form_id) }}
+                search={{}}
+                hash="members"
+                className="btn-ghost"
+              >
+                الاستمارة كاملة
+              </Link>
             </div>
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <Info label="رقم السجل" v={selected.family?.registry_number} />

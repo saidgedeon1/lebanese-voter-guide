@@ -13,8 +13,18 @@ import {
   deleteIndividual,
   addIndividualToFamily,
   normalizeRelation,
+  findSpouse,
   type Individual,
 } from "@/lib/registry";
+import {
+  QUICK_ADD_RELATIONS,
+  defaultsForRelation,
+  defaultMaritalForRelation,
+  isMarriedRelation,
+  patchOnRelationChange,
+  relationFieldHint,
+  tripleName,
+} from "@/lib/family-form-defaults";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PersonFilesPanel } from "@/components/PersonFilesPanel";
 import { PassportPhoto } from "@/components/PassportPhoto";
@@ -80,8 +90,9 @@ function fromIndividual(member: Individual): IndividualDraft {
 }
 
 function toPayload(draft: IndividualDraft) {
+  const relation = normalizeRelation(draft.relation) || draft.relation;
   return {
-    relation: draft.relation,
+    relation,
     first_name: draft.first_name.trim(),
     last_name: draft.last_name.trim(),
     father_name: draft.father_name.trim() || null,
@@ -89,7 +100,11 @@ function toPayload(draft: IndividualDraft) {
     birth_year: draft.birth_year ? parseInt(draft.birth_year, 10) : null,
     mobile: draft.mobile.trim() || null,
     current_residence: draft.current_residence.trim() || null,
-    marital_status: draft.marital_status,
+    marital_status: isMarriedRelation(relation)
+      ? draft.marital_status === "أعزب" || draft.marital_status === "عزباء"
+        ? "متزوج"
+        : draft.marital_status || "متزوج"
+      : draft.marital_status,
     lives_with_family: draft.lives_with_family,
     is_military: draft.is_military,
     political_leaning: draft.political_leaning,
@@ -99,24 +114,30 @@ function toPayload(draft: IndividualDraft) {
   };
 }
 
-function emptyDraft(relation = "ابن", defaults: Partial<IndividualDraft> = {}): IndividualDraft {
+function emptyDraft(
+  relation = "ابن",
+  household: IndividualDraft[] = [],
+  familyLastName = "",
+  extras: Partial<IndividualDraft> = {},
+): IndividualDraft {
+  const relDefaults = defaultsForRelation(relation, household, familyLastName);
   return {
-    relation,
+    relation: relDefaults.relation || relation,
     first_name: "",
-    last_name: "",
-    father_name: "",
-    mother_name: "",
+    last_name: relDefaults.last_name || "",
+    father_name: relDefaults.father_name || "",
+    mother_name: relDefaults.mother_name || "",
     birth_year: "",
     mobile: "",
     current_residence: "",
-    marital_status: ["زوجة", "زوج", "رب العائلة", "كنة", "صهر"].includes(relation) ? "متزوج" : "أعزب",
+    marital_status: relDefaults.marital_status || defaultMaritalForRelation(relation),
     lives_with_family: true,
     is_military: false,
     political_leaning: "غير مهتم",
     preferred_candidate: "",
     voter_status: "مقيم",
     has_voted: false,
-    ...defaults,
+    ...extras,
   };
 }
 
@@ -161,14 +182,33 @@ function Toggle({
 function IndividualFields({
   ind,
   onChange,
+  household = [],
+  familyLastName = "",
+  spouseLabel,
 }: {
   ind: IndividualDraft;
   onChange: (patch: Partial<IndividualDraft>) => void;
+  household?: IndividualDraft[];
+  familyLastName?: string;
+  spouseLabel?: string | null;
 }) {
+  const hint = relationFieldHint(ind.relation);
+  const rel = normalizeRelation(ind.relation);
+  const lastNameLabel =
+    rel === "زوجة" || rel === "كنة"
+      ? "الشهرة (عائلتها قبل الزواج)"
+      : rel === "صهر"
+        ? "الشهرة (عائلته)"
+        : "الشهرة / اسم العائلة";
+
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <Field label="صلة القرابة">
-        <select className="field" value={ind.relation} onChange={(e) => onChange({ relation: e.target.value })}>
+        <select
+          className="field"
+          value={ind.relation}
+          onChange={(e) => onChange(patchOnRelationChange(ind, e.target.value, household, familyLastName))}
+        >
           {RELATION_OPTIONS.map((r) => (
             <option key={r} value={r}>
               {r}
@@ -179,8 +219,13 @@ function IndividualFields({
       <Field label="الاسم الأول">
         <input className="field" value={ind.first_name} onChange={(e) => onChange({ first_name: e.target.value })} />
       </Field>
-      <Field label="الشهرة / اسم العائلة">
-        <input className="field" value={ind.last_name} onChange={(e) => onChange({ last_name: e.target.value })} />
+      <Field label={lastNameLabel}>
+        <input
+          className="field"
+          value={ind.last_name}
+          onChange={(e) => onChange({ last_name: e.target.value })}
+          placeholder={rel === "زوجة" || rel === "كنة" ? "شهرة أهلها" : undefined}
+        />
       </Field>
       <Field label="اسم الأب">
         <input className="field" value={ind.father_name} onChange={(e) => onChange({ father_name: e.target.value })} />
@@ -188,6 +233,16 @@ function IndividualFields({
       <Field label="اسم الأم والشهرة قبل الزواج">
         <input className="field" value={ind.mother_name} onChange={(e) => onChange({ mother_name: e.target.value })} />
       </Field>
+      {(hint || spouseLabel) && (
+        <div className="sm:col-span-2 lg:col-span-3 text-xs text-muted-foreground space-y-1">
+          {hint && <div>{hint}</div>}
+          {spouseLabel && (
+            <div>
+              الزوج / الزوجة المرتبط: <span className="font-semibold text-foreground">{spouseLabel}</span>
+            </div>
+          )}
+        </div>
+      )}
       <Field label="تاريخ الولادة (سنة الولادة)">
         <input className="field" inputMode="numeric" value={ind.birth_year} onChange={(e) => onChange({ birth_year: e.target.value })} />
       </Field>
@@ -372,11 +427,15 @@ function EditFamilyPage() {
       for (const draft of members) {
         if (!draft.id) continue;
         if (!draft.first_name.trim()) throw new Error("الاسم مطلوب لكل الأفراد");
+        const relation = normalizeRelation(draft.relation) || draft.relation;
+        const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
         const fallbackLastName =
           draft.last_name.trim() ||
-          members.find((m) => m.last_name.trim())?.last_name.trim() ||
-          data?.members.find((m) => m.last_name)?.last_name ||
-          "";
+          (keepOwn
+            ? "غير محدد"
+            : members.find((m) => m.last_name.trim())?.last_name.trim() ||
+              data?.members.find((m) => m.last_name)?.last_name ||
+              "");
         if (!fallbackLastName) throw new Error("الشهرة مطلوبة");
         await updateIndividual(
           draft.id,
@@ -402,11 +461,15 @@ function EditFamilyPage() {
       if (!draft.first_name.trim()) {
         throw new Error("الاسم مطلوب");
       }
+      const relation = normalizeRelation(draft.relation) || draft.relation;
+      const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
       const fallbackLastName =
         draft.last_name.trim() ||
-        members.find((m) => m.last_name.trim())?.last_name.trim() ||
-        data?.members.find((m) => m.last_name)?.last_name ||
-        "";
+        (keepOwn
+          ? "غير محدد"
+          : members.find((m) => m.last_name.trim())?.last_name.trim() ||
+            data?.members.find((m) => m.last_name)?.last_name ||
+            "");
       if (!fallbackLastName) {
         throw new Error("الشهرة مطلوبة");
       }
@@ -440,11 +503,15 @@ function EditFamilyPage() {
       if (!draft.first_name.trim()) {
         throw new Error("الاسم مطلوب");
       }
+      const relation = normalizeRelation(draft.relation) || draft.relation;
+      const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
       const fallbackLastName =
         draft.last_name.trim() ||
-        members.find((m) => m.last_name.trim())?.last_name.trim() ||
-        data?.members.find((m) => m.last_name)?.last_name ||
-        "";
+        (keepOwn
+          ? "غير محدد"
+          : members.find((m) => m.last_name.trim())?.last_name.trim() ||
+            data?.members.find((m) => m.last_name)?.last_name ||
+            "");
       if (!fallbackLastName) {
         throw new Error("الشهرة مطلوبة");
       }
@@ -468,15 +535,7 @@ function EditFamilyPage() {
 
   const startAddMember = (relation: string) => {
     setMessage(null);
-    setNewMember(
-      emptyDraft(relation, {
-        last_name: familyLastName,
-        father_name:
-          relation === "ابن" || relation === "ابنة"
-            ? members.find((m) => ["رب العائلة", "والد", "زوج"].includes(m.relation))?.first_name || ""
-            : "",
-      }),
-    );
+    setNewMember(emptyDraft(relation, members, familyLastName));
     requestAnimationFrame(() => {
       document.getElementById("new-member-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -498,16 +557,9 @@ function EditFamilyPage() {
 
     if (openAdd) {
       deepLinkHandled.current = true;
+      const drafts = data.members.map(fromIndividual);
       const last = data.members.find((m) => m.last_name)?.last_name || "";
-      const father =
-        data.members.find((m) => ["رب العائلة", "والد", "زوج"].includes(normalizeRelation(m.relation) || m.relation))
-          ?.first_name || "";
-      setNewMember(
-        emptyDraft("ابن", {
-          last_name: last,
-          father_name: father,
-        }),
-      );
+      setNewMember(emptyDraft("ابن", drafts, last));
       requestAnimationFrame(() => {
         document.getElementById("new-member-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
@@ -608,14 +660,7 @@ function EditFamilyPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {[
-              { relation: "زوجة", label: "+ زوجة" },
-              { relation: "زوج", label: "+ زوج" },
-              { relation: "والدة", label: "+ والدة" },
-              { relation: "والد", label: "+ والد" },
-              { relation: "ابن", label: "+ ابن" },
-              { relation: "ابنة", label: "+ ابنة" },
-            ].map((item) => (
+            {QUICK_ADD_RELATIONS.map((item) => (
               <button
                 key={item.relation}
                 type="button"
@@ -637,14 +682,25 @@ function EditFamilyPage() {
                 إلغاء
               </button>
             </div>
-            <IndividualFields ind={newMember} onChange={(patch) => setNewMember((prev) => (prev ? { ...prev, ...patch } : prev))} />
+            <IndividualFields
+              ind={newMember}
+              household={members}
+              familyLastName={familyLastName}
+              onChange={(patch) => setNewMember((prev) => (prev ? { ...prev, ...patch } : prev))}
+            />
             <button className="btn-primary w-full sm:w-auto" disabled={createMember.isPending} onClick={() => createMember.mutate(newMember)}>
               {createMember.isPending ? "جاري الإضافة..." : "حفظ الفرد الجديد في الاستمارة"}
             </button>
           </div>
         )}
 
-        {members.map((member, idx) => (
+        {members.map((member, idx) => {
+          const original = member.id && data ? data.members.find((m) => m.id === member.id) : null;
+          const spouse =
+            original && data
+              ? findSpouse({ ...original, ...member, id: member.id! } as Individual, data.members)
+              : null;
+          return (
           <div
             key={member.id ?? idx}
             id={member.id ? `member-${member.id}` : undefined}
@@ -669,6 +725,11 @@ function EditFamilyPage() {
                   <div className="font-bold text-lg leading-tight">
                     {member.first_name} {member.last_name}
                   </div>
+                  {spouse && (
+                    <div className="text-xs text-muted-foreground">
+                      الزوج / الزوجة: {tripleName(spouse)}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -693,6 +754,9 @@ function EditFamilyPage() {
             </div>
             <IndividualFields
               ind={member}
+              household={members}
+              familyLastName={familyLastName}
+              spouseLabel={spouse ? tripleName(spouse) : null}
               onChange={(patch) =>
                 setMembers((prev) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item)))
               }
@@ -707,7 +771,8 @@ function EditFamilyPage() {
               </div>
             ) : null}
           </div>
-        ))}
+          );
+        })}
 
         {members.length === 0 && !newMember && (
           <div className="card-elev p-6 text-center space-y-3">

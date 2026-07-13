@@ -7,7 +7,19 @@ import {
   POLITICAL_OPTIONS,
   VOTER_STATUS_OPTIONS,
   createFamilyWithIndividuals,
+  normalizeRelation,
 } from "@/lib/registry";
+import {
+  QUICK_ADD_RELATIONS,
+  defaultsForRelation,
+  defaultMaritalForRelation,
+  isMarriedRelation,
+  patchOnRelationChange,
+  relationFieldHint,
+  tripleName,
+  findHeadPerson,
+  findWifePerson,
+} from "@/lib/family-form-defaults";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 export const Route = createFileRoute("/families/new")({
@@ -32,24 +44,29 @@ type IndividualDraft = {
   has_voted: boolean;
 };
 
-function createIndividual(relation = "ابن", defaults: Partial<IndividualDraft> = {}): IndividualDraft {
+function createIndividual(
+  relation = "ابن",
+  household: IndividualDraft[] = [],
+  extras: Partial<IndividualDraft> = {},
+): IndividualDraft {
+  const relDefaults = defaultsForRelation(relation, household);
   return {
-    relation,
+    relation: relDefaults.relation || relation,
     first_name: "",
-    last_name: "",
-    father_name: "",
-    mother_name: "",
+    last_name: relDefaults.last_name || "",
+    father_name: relDefaults.father_name || "",
+    mother_name: relDefaults.mother_name || "",
     birth_year: "",
     mobile: "",
     current_residence: "",
-    marital_status: ["زوجة", "زوج", "رب العائلة", "كنة", "صهر"].includes(relation) ? "متزوج" : "أعزب",
+    marital_status: relDefaults.marital_status || defaultMaritalForRelation(relation),
     lives_with_family: true,
     is_military: false,
     political_leaning: "غير مهتم",
     preferred_candidate: "",
     voter_status: "مقيم",
     has_voted: false,
-    ...defaults,
+    ...extras,
   };
 }
 
@@ -65,14 +82,32 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function IndividualFields({
   ind,
   onChange,
+  household = [],
+  spouseLabel,
 }: {
   ind: IndividualDraft;
   onChange: (patch: Partial<IndividualDraft>) => void;
+  household?: IndividualDraft[];
+  spouseLabel?: string | null;
 }) {
+  const hint = relationFieldHint(ind.relation);
+  const lastNameLabel =
+    normalizeRelation(ind.relation) === "زوجة" || normalizeRelation(ind.relation) === "كنة"
+      ? "الشهرة (عائلتها قبل الزواج)"
+      : normalizeRelation(ind.relation) === "صهر"
+        ? "الشهرة (عائلته)"
+        : "الشهرة / اسم العائلة";
+
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <Field label="صلة القرابة">
-        <select className="field" value={ind.relation} onChange={(e) => onChange({ relation: e.target.value })}>
+        <select
+          className="field"
+          value={ind.relation}
+          onChange={(e) =>
+            onChange(patchOnRelationChange(ind, e.target.value, household, household[0]?.last_name || ""))
+          }
+        >
           {RELATION_OPTIONS.map((r) => (
             <option key={r} value={r}>
               {r}
@@ -88,12 +123,16 @@ function IndividualFields({
           placeholder="مثال: جورج"
         />
       </Field>
-      <Field label="الشهرة / اسم العائلة">
+      <Field label={lastNameLabel}>
         <input
           className="field"
           value={ind.last_name}
           onChange={(e) => onChange({ last_name: e.target.value })}
-          placeholder="مثال: حداد"
+          placeholder={
+            normalizeRelation(ind.relation) === "زوجة" || normalizeRelation(ind.relation) === "كنة"
+              ? "شهرة أهلها"
+              : "مثال: حداد"
+          }
         />
       </Field>
       <Field label="اسم الأب">
@@ -102,6 +141,12 @@ function IndividualFields({
       <Field label="اسم الأم والشهرة قبل الزواج">
         <input className="field" value={ind.mother_name} onChange={(e) => onChange({ mother_name: e.target.value })} />
       </Field>
+      {(hint || spouseLabel) && (
+        <div className="sm:col-span-2 lg:col-span-3 text-xs text-muted-foreground space-y-1">
+          {hint && <div>{hint}</div>}
+          {spouseLabel && <div>الزوج / الزوجة المرتبط: <span className="font-semibold text-foreground">{spouseLabel}</span></div>}
+        </div>
+      )}
       <Field label="تاريخ الولادة (سنة الولادة)">
         <input
           className="field"
@@ -234,17 +279,23 @@ function NewFamily() {
   const mutation = useMutation({
     mutationFn: async () => {
       const familyLastName = head.last_name.trim() || "غير محدد";
-      const all = [head, ...members].map((i) => ({
-        ...i,
-        first_name: i.first_name.trim() || "بدون اسم",
-        last_name: i.last_name.trim() || familyLastName,
-        father_name: i.father_name.trim() || null,
-        mother_name: i.mother_name.trim() || null,
-        birth_year: i.birth_year ? parseInt(i.birth_year, 10) : null,
-        mobile: i.mobile.trim() || null,
-        current_residence: i.current_residence.trim() || null,
-        preferred_candidate: i.preferred_candidate.trim() || null,
-      }));
+      const all = [head, ...members].map((i) => {
+        const relation = normalizeRelation(i.relation) || i.relation;
+        const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
+        return {
+          ...i,
+          relation,
+          first_name: i.first_name.trim() || "بدون اسم",
+          last_name: i.last_name.trim() || (keepOwn ? "غير محدد" : familyLastName),
+          father_name: i.father_name.trim() || null,
+          mother_name: i.mother_name.trim() || null,
+          birth_year: i.birth_year ? parseInt(i.birth_year, 10) : null,
+          mobile: i.mobile.trim() || null,
+          current_residence: i.current_residence.trim() || null,
+          preferred_candidate: i.preferred_candidate.trim() || null,
+          marital_status: isMarriedRelation(relation) ? "متزوج" : i.marital_status || "أعزب",
+        };
+      });
       const payload = {
         ...family,
         registry_district: family.registry_district.trim() || "غير محدد",
@@ -269,8 +320,28 @@ function NewFamily() {
     onSuccess: () => navigate({ to: "/individuals" }),
   });
 
+  const household = [head, ...members];
+  const wife = findWifePerson(members);
+
+  const addMember = (relation: string) => {
+    setMembers((prev) => [...prev, createIndividual(relation, [head, ...prev])]);
+  };
+
   const updateMember = (idx: number, patch: Partial<IndividualDraft>) => {
     setMembers((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
+  };
+
+  const spouseFor = (person: IndividualDraft, others: IndividualDraft[]) => {
+    const rel = normalizeRelation(person.relation);
+    if (rel === "زوجة" || rel === "والدة") return findHeadPerson([head, ...others]);
+    if (rel === "رب العائلة" || rel === "زوج" || rel === "والد") {
+      return findWifePerson(others) || (person === head ? wife : undefined);
+    }
+    if (rel === "كنة") {
+      const sons = others.filter((m) => normalizeRelation(m.relation) === "ابن" && m.marital_status === "متزوج");
+      return sons.length === 1 ? sons[0] : others.find((m) => normalizeRelation(m.relation) === "ابن");
+    }
+    return undefined;
   };
 
   const saveButton = (
@@ -312,7 +383,12 @@ function NewFamily() {
                 <span className="chip !bg-destructive !text-destructive-foreground">عسكري — لا يحق له الاقتراع</span>
               )}
             </div>
-            <IndividualFields ind={head} onChange={(patch) => setHead((prev) => ({ ...prev, ...patch }))} />
+            <IndividualFields
+              ind={head}
+              household={household}
+              spouseLabel={wife ? tripleName(wife) : null}
+              onChange={(patch) => setHead((prev) => ({ ...prev, ...patch }))}
+            />
           </section>
 
           <section>
@@ -487,15 +563,30 @@ function NewFamily() {
 
           {members.length === 0 && (
             <div className="card-elev p-6 text-center text-muted-foreground">
-              ما في أفراد مضافين بعد. اضغط «+ إضافة فرد» لتسجيل زوج/زوجة أو أولاد أو باقي العائلة.
+              ما في أفراد مضافين بعد. اختار نوع القرابة تحت لتسجيل زوجة / زوج / أولاد / كنة…
             </div>
           )}
 
-          {members.map((ind, idx) => (
+          <div className="card-elev p-4 flex flex-wrap gap-2">
+            {QUICK_ADD_RELATIONS.map((item) => (
+              <button
+                key={item.relation}
+                type="button"
+                className="chip hover:bg-primary hover:text-primary-foreground transition cursor-pointer border border-border"
+                onClick={() => addMember(item.relation)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {members.map((ind, idx) => {
+            const spouse = spouseFor(ind, [head, ...members.filter((_, i) => i !== idx)]);
+            return (
             <div key={idx} className="card-elev p-5 sm:p-6">
               <div className="flex items-center justify-between mb-4 gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="chip">فرد #{idx + 1}</span>
+                  <span className="chip">{ind.relation || `فرد #${idx + 1}`}</span>
                   {ind.is_military && (
                     <span className="chip !bg-destructive !text-destructive-foreground">
                       عسكري — لا يحق له الاقتراع
@@ -509,23 +600,18 @@ function NewFamily() {
                   حذف
                 </button>
               </div>
-              <IndividualFields ind={ind} onChange={(patch) => updateMember(idx, patch)} />
+              <IndividualFields
+                ind={ind}
+                household={household}
+                spouseLabel={spouse ? tripleName(spouse) : null}
+                onChange={(patch) => updateMember(idx, patch)}
+              />
             </div>
-          ))}
+            );
+          })}
 
           <div className="flex flex-wrap gap-2 justify-between">
-            <button
-              className="btn-ghost"
-              onClick={() =>
-                setMembers((p) => [
-                  ...p,
-                  createIndividual("ابن", {
-                    last_name: head.last_name,
-                    father_name: head.first_name,
-                  }),
-                ])
-              }
-            >
+            <button className="btn-ghost" onClick={() => addMember("ابن")}>
               + إضافة فرد
             </button>
             <div className="flex gap-2">

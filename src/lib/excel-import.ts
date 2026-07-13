@@ -6,7 +6,10 @@ import {
   MARITAL_OPTIONS,
   POLITICAL_OPTIONS,
   RELATION_OPTIONS,
-  VOTER_STATUS_OPTIONS,
+  normalizeRelation,
+  normalizeVoterStatus,
+  parseBirthYear,
+  resolveMaritalStatus,
 } from "@/lib/registry";
 
 export const EXCEL_HEADERS = [
@@ -73,17 +76,16 @@ function parseBool(value: string, fallback = false) {
   return fallback;
 }
 
-function parseBirthYear(value: string) {
-  if (!value) return null;
-  const year = Number.parseInt(value, 10);
-  if (!Number.isFinite(year) || year < 1900 || year > new Date().getFullYear()) return null;
-  return year;
-}
-
 function pickOption(value: string, options: readonly string[], fallback: string) {
   if (!value) return fallback;
   const match = options.find((option) => option === value);
   return match ?? fallback;
+}
+
+function pickRelation(value: string) {
+  const normalized = normalizeRelation(value);
+  if ((RELATION_OPTIONS as readonly string[]).includes(normalized)) return normalized;
+  return pickOption(value, RELATION_OPTIONS, "رب العائلة");
 }
 
 function familyKeyFrom(raw: Record<string, unknown>, lastName: string) {
@@ -199,7 +201,7 @@ export async function parseExcelFile(file: File): Promise<ExcelImportPreview> {
     const lastName = cell(raw, "الشهرة");
     const district = cell(raw, "قضاء النفوس");
     const town = cell(raw, "بلدة النفوس");
-    const relation = pickOption(cell(raw, "صلة القرابة"), RELATION_OPTIONS, "رب العائلة");
+    const relation = pickRelation(cell(raw, "صلة القرابة"));
 
     if (!firstName) errors.push("الاسم الأول مطلوب");
     if (!lastName) errors.push("الشهرة مطلوبة");
@@ -207,6 +209,9 @@ export async function parseExcelFile(file: File): Promise<ExcelImportPreview> {
     if (!town) errors.push("بلدة النفوس مطلوبة");
 
     const familyKey = familyKeyFrom(raw, lastName) || `صف-${index + 2}`;
+    const rawVoter = cell(raw, "وضع الناخب");
+    const rawPreferred = cell(raw, "الصوت التفضيلي");
+    const voterStatus = normalizeVoterStatus(rawVoter || (/متوف/.test(rawPreferred) ? "متوفّى" : "مقيم"));
 
     return {
       rowNumber: index + 2,
@@ -238,12 +243,12 @@ export async function parseExcelFile(file: File): Promise<ExcelImportPreview> {
         birth_year: parseBirthYear(cell(raw, "سنة الولادة")),
         mobile: cell(raw, "الجوال") || null,
         current_residence: cell(raw, "السكن الحالي") || null,
-        marital_status: pickOption(cell(raw, "الوضع العائلي"), MARITAL_OPTIONS, "أعزب"),
+        marital_status: resolveMaritalStatus(relation, cell(raw, "الوضع العائلي")),
         lives_with_family: parseBool(cell(raw, "السكن مع الأهل"), true),
         is_military: parseBool(cell(raw, "عسكري"), false),
         political_leaning: pickOption(cell(raw, "الميول السياسية"), POLITICAL_OPTIONS, "غير مهتم"),
-        preferred_candidate: cell(raw, "الصوت التفضيلي") || null,
-        voter_status: pickOption(cell(raw, "وضع الناخب"), VOTER_STATUS_OPTIONS, "مقيم"),
+        preferred_candidate: rawPreferred || null,
+        voter_status: voterStatus,
         has_voted: parseBool(cell(raw, "اقترع"), false),
       },
       errors,

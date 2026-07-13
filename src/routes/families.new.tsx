@@ -11,7 +11,8 @@ import {
   resolveMaritalStatus,
   parseBirthYear,
   draftSaveWarnings,
-  applyDeceasedToVoterStatus,
+  applyDeceasedFields,
+  stripDeceasedMarker,
 } from "@/lib/registry";
 import {
   QUICK_ADD_RELATIONS,
@@ -224,7 +225,7 @@ function IndividualFields({
         <Toggle
           label="متوفّى"
           value={ind.voter_status === "متوفّى"}
-          onChange={(v) => onChange({ voter_status: applyDeceasedToVoterStatus(ind.voter_status, v) })}
+          onChange={(v) => onChange(applyDeceasedFields(ind, v))}
           danger
         />
       </div>
@@ -304,9 +305,9 @@ function NewFamily() {
           birth_year: parseBirthYear(i.birth_year),
           mobile: i.mobile.trim() || null,
           current_residence: i.current_residence.trim() || null,
-          preferred_candidate: i.preferred_candidate.trim() || null,
+          preferred_candidate: stripDeceasedMarker(i.preferred_candidate) || null,
           marital_status: resolveMaritalStatus(relation, i.marital_status),
-          voter_status: i.voter_status || "مقيم",
+          voter_status: i.voter_status === "متوفّى" ? "متوفّى" : i.voter_status || "مقيم",
         };
       });
       const payload = {

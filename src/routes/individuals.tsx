@@ -58,7 +58,7 @@ function IndividualsList() {
   const [residence, setResidence] = useState("");
   const [political, setPolitical] = useState("");
   const [town, setTown] = useState("");
-  const [voterFilter, setVoterFilter] = useState<"" | "eligible_not_voted" | "voted" | "deceased" | "expat" | "military">("");
+  const [voterFilter, setVoterFilter] = useState<"" | "voted" | "deceased" | "expat" | "military">("");
   const [viewing, setViewing] = useState<ListedIndividual | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ListedIndividual | null>(null);
 
@@ -197,11 +197,10 @@ function IndividualsList() {
             onChange={(e) => setVoterFilter(e.target.value as typeof voterFilter)}
           >
             <option value="">— الكل —</option>
-            <option value="eligible_not_voted">يحق له وما اقترع</option>
-            <option value="voted">اقترع</option>
             <option value="deceased">متوفّى</option>
             <option value="expat">مغترب</option>
             <option value="military">عسكري</option>
+            <option value="voted">اقترع (مسجّل)</option>
           </select>
         </div>
       </div>

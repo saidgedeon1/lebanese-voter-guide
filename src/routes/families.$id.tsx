@@ -17,8 +17,9 @@ import {
   resolveMaritalStatus,
   parseBirthYear,
   draftSaveWarnings,
-  applyDeceasedToVoterStatus,
+  applyDeceasedFields,
   isDeceased,
+  stripDeceasedMarker,
   type Individual,
 } from "@/lib/registry";
 import {
@@ -108,8 +109,8 @@ function toPayload(draft: IndividualDraft) {
     lives_with_family: draft.lives_with_family,
     is_military: draft.is_military,
     political_leaning: draft.political_leaning,
-    preferred_candidate: draft.preferred_candidate.trim() || null,
-    voter_status: draft.voter_status,
+    preferred_candidate: stripDeceasedMarker(draft.preferred_candidate) || null,
+    voter_status: draft.voter_status === "متوفّى" || isDeceased(draft) ? "متوفّى" : draft.voter_status,
     has_voted: draft.has_voted,
   };
 }
@@ -299,7 +300,7 @@ function IndividualFields({
         <Toggle
           label="متوفّى"
           value={ind.voter_status === "متوفّى" || isDeceased({ voter_status: ind.voter_status, preferred_candidate: ind.preferred_candidate })}
-          onChange={(v) => onChange({ voter_status: applyDeceasedToVoterStatus(ind.voter_status, v) })}
+          onChange={(v) => onChange(applyDeceasedFields(ind, v))}
           danger
         />
       </div>

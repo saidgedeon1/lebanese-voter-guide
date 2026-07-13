@@ -84,6 +84,15 @@ export function isDeceased(
   return /متوف/.test(person.preferred_candidate ?? "");
 }
 
+/** Remove legacy «متوف» markers from preferred_candidate so toggle-off sticks. */
+export function stripDeceasedMarker(preferred: string | null | undefined) {
+  return (preferred ?? "")
+    .replace(/\s*\|\s*متوفّ?[ىي]?\s*/g, " ")
+    .replace(/(^|[\s،,])متوفّ?[ىي]?(?=$|[\s،,|])/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Keep أرمل/مطلق; only upgrade empty/single → متزوج for married relations. */
 export function resolveMaritalStatus(relation: string | null | undefined, status: string | null | undefined) {
   const self = normalizeRelation(relation);
@@ -103,10 +112,36 @@ export function parseBirthYear(value: string | null | undefined): number | null 
   return year;
 }
 
+/** Toggle متوفّى: updates voter_status and clears legacy markers in الصوت التفضيلي. */
+export function applyDeceasedFields(
+  current: { voter_status: string; preferred_candidate: string },
+  deceased: boolean,
+) {
+  if (deceased) {
+    return {
+      voter_status: "متوفّى" as const,
+      preferred_candidate: stripDeceasedMarker(current.preferred_candidate),
+    };
+  }
+  return {
+    voter_status: (current.voter_status ?? "").trim() === "متوفّى" ? "مقيم" : current.voter_status || "مقيم",
+    preferred_candidate: stripDeceasedMarker(current.preferred_candidate),
+  };
+}
+
+/** @deprecated use applyDeceasedFields */
 export function applyDeceasedToVoterStatus(currentStatus: string, deceased: boolean) {
   if (deceased) return "متوفّى";
   if ((currentStatus ?? "").trim() === "متوفّى") return "مقيم";
   return currentStatus || "مقيم";
+}
+
+export function normalizeVoterStatus(value: string | null | undefined) {
+  const raw = (value ?? "").trim();
+  if (!raw) return "مقيم";
+  if (/متوف/.test(raw)) return "متوفّى";
+  if (raw === "مغترب" || raw === "مقيم" || raw === "متوفّى") return raw;
+  return "مقيم";
 }
 
 export function draftSaveWarnings(
@@ -406,7 +441,6 @@ export async function fetchStats() {
     voted: votedCount,
     deceased: deceasedCount,
     living: Math.max(0, totalPeople - deceasedCount),
-    not_voted_eligible: Math.max(0, totalPeople - deceasedCount - (military ?? 0) - votedCount),
   };
 }
 
@@ -415,7 +449,7 @@ export async function listIndividuals(filters: {
   political?: string;
   town?: string;
   search?: string;
-  voterFilter?: "" | "eligible_not_voted" | "voted" | "deceased" | "expat" | "military";
+  voterFilter?: "" | "voted" | "deceased" | "expat" | "military";
 } = {}) {
   let q = sb
     .from("individuals")
@@ -435,6 +469,14 @@ export async function listIndividuals(filters: {
     }
   >;
 
+  // Build full-family maps BEFORE voter filters so spouse names stay accurate.
+  const byFamilyAll = new Map<number, typeof rows>();
+  for (const row of rows) {
+    const list = byFamilyAll.get(row.family_form_id) ?? [];
+    list.push(row);
+    byFamilyAll.set(row.family_form_id, list);
+  }
+
   if (filters.town) {
     rows = rows.filter((r) => r.family?.registry_town?.includes(filters.town!));
   }
@@ -442,17 +484,11 @@ export async function listIndividuals(filters: {
   if (filters.voterFilter === "deceased") {
     rows = rows.filter((r) => isDeceased(r));
   } else if (filters.voterFilter === "voted") {
-    rows = rows.filter((r) => r.has_voted && !isDeceased(r));
+    rows = rows.filter((r) => !!r.has_voted && !isDeceased(r));
   } else if (filters.voterFilter === "expat") {
     rows = rows.filter((r) => r.voter_status === "مغترب" && !isDeceased(r));
   } else if (filters.voterFilter === "military") {
     rows = rows.filter((r) => r.is_military);
-  } else if (filters.voterFilter === "eligible_not_voted") {
-    rows = rows.filter((r) => {
-      if (isDeceased(r) || r.is_military || r.has_voted) return false;
-      const age = getAge(r.birth_year);
-      return age !== null && age >= 21;
-    });
   }
 
   if (filters.search?.trim()) {
@@ -480,15 +516,8 @@ export async function listIndividuals(filters: {
     });
   }
 
-  const byFamily = new Map<number, typeof rows>();
-  for (const row of rows) {
-    const list = byFamily.get(row.family_form_id) ?? [];
-    list.push(row);
-    byFamily.set(row.family_form_id, list);
-  }
-
   return rows.map((row) => {
-    const relatives = byFamily.get(row.family_form_id) ?? [];
+    const relatives = byFamilyAll.get(row.family_form_id) ?? [];
     const spouse = findSpouse(row, relatives);
 
     return {

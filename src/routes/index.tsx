@@ -219,20 +219,13 @@ function Dashboard() {
       {error ? (
         <div className="card-elev p-6 text-destructive">تعذّر تحميل الإحصائيات.</div>
       ) : (
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <StatCard label="إجمالي الأفراد" value={isLoading ? 0 : data!.individuals} icon="🗳️" tone="oklch(0.55 0.14 155)" />
           <StatCard label="العايشون" value={isLoading ? 0 : data!.living} icon="💚" tone="oklch(0.58 0.12 145)" />
           <StatCard label="المتوفون" value={isLoading ? 0 : data!.deceased} icon="🕯️" tone="oklch(0.45 0.02 260)" />
-          <StatCard label="اقترعوا" value={isLoading ? 0 : data!.voted} icon="✅" tone="oklch(0.62 0.14 145)" />
           <StatCard label="إجمالي المؤيدين" value={isLoading ? 0 : data!.supporters} icon="🤝" tone="oklch(0.72 0.14 65)" />
           <StatCard label="العسكريون المستثنون" value={isLoading ? 0 : data!.military} icon="⚠️" tone="oklch(0.55 0.22 25)" />
           <StatCard label="إجمالي العائلات" value={isLoading ? 0 : data!.families} icon="🏠" tone="oklch(0.5 0.09 158)" />
-          <StatCard
-            label="لم يقترعوا (تقديري)"
-            value={isLoading ? 0 : data!.not_voted_eligible ?? 0}
-            icon="⏳"
-            tone="oklch(0.65 0.12 75)"
-          />
         </section>
       )}
 

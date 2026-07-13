@@ -343,6 +343,59 @@ function EditFamilyPage() {
     },
   });
 
+  const [savingAll, setSavingAll] = useState(false);
+  const [saveAllError, setSaveAllError] = useState<string | null>(null);
+
+  const saveAllChanges = async () => {
+    setSavingAll(true);
+    setSaveAllError(null);
+    setMessage(null);
+    try {
+      await updateFamilyForm(familyId, {
+        registry_district: family.registry_district.trim(),
+        registry_town: family.registry_town.trim(),
+        sect: family.sect.trim() || null,
+        registry_number: family.registry_number.trim() || null,
+        winter_country: family.winter_country.trim() || null,
+        winter_governorate: family.winter_governorate.trim() || null,
+        winter_district: family.winter_district.trim() || null,
+        winter_town: family.winter_town.trim() || null,
+        winter_street: family.winter_street.trim() || null,
+        winter_phone: family.winter_phone.trim() || null,
+        summer_country: family.summer_country.trim() || null,
+        summer_governorate: family.summer_governorate.trim() || null,
+        summer_district: family.summer_district.trim() || null,
+        summer_town: family.summer_town.trim() || null,
+        summer_street: family.summer_street.trim() || null,
+        summer_phone: family.summer_phone.trim() || null,
+      });
+      for (const draft of members) {
+        if (!draft.id) continue;
+        if (!draft.first_name.trim()) throw new Error("الاسم مطلوب لكل الأفراد");
+        const fallbackLastName =
+          draft.last_name.trim() ||
+          members.find((m) => m.last_name.trim())?.last_name.trim() ||
+          data?.members.find((m) => m.last_name)?.last_name ||
+          "";
+        if (!fallbackLastName) throw new Error("الشهرة مطلوبة");
+        await updateIndividual(
+          draft.id,
+          toPayload({
+            ...draft,
+            last_name: fallbackLastName,
+          }),
+        );
+      }
+      setMessage("تم حفظ كل التعديلات (الأفراد + الاستمارة).");
+      await invalidateAll();
+      await refetch();
+    } catch (err) {
+      setSaveAllError((err as Error).message || "تعذّر الحفظ");
+    } finally {
+      setSavingAll(false);
+    }
+  };
+
   const saveMember = useMutation({
     mutationFn: async (draft: IndividualDraft) => {
       if (!draft.id) throw new Error("فرد غير موجود");
@@ -493,7 +546,7 @@ function EditFamilyPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">تعديل الاستمارة #{familyId}</h1>
@@ -502,10 +555,18 @@ function EditFamilyPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={savingAll}
+            onClick={() => void saveAllChanges()}
+          >
+            {savingAll ? "جاري الحفظ..." : "حفظ الكل"}
+          </button>
           <Link to="/" className="btn-ghost">
             العودة
           </Link>
-          <a href="#members" className="btn-primary">
+          <a href="#members" className="btn-ghost">
             إدارة الأفراد
           </a>
           <button
@@ -519,15 +580,16 @@ function EditFamilyPage() {
       </div>
 
       {message && <div className="card-elev p-4 text-success text-sm font-semibold">{message}</div>}
-      {(saveFamily.error || saveMember.error || removeMember.error || createMember.error || removeFamily.error) && (
+      {(saveAllError || saveFamily.error || saveMember.error || removeMember.error || createMember.error || removeFamily.error) && (
         <div className="card-elev p-4 text-destructive text-sm">
-          {(
-            (saveFamily.error ||
-              saveMember.error ||
-              removeMember.error ||
-              createMember.error ||
-              removeFamily.error) as Error
-          ).message}
+          {saveAllError ||
+            (
+              (saveFamily.error ||
+                saveMember.error ||
+                removeMember.error ||
+                createMember.error ||
+                removeFamily.error) as Error
+            ).message}
         </div>
       )}
 
@@ -615,7 +677,7 @@ function EditFamilyPage() {
                   disabled={saveMember.isPending}
                   onClick={() => saveMember.mutate(member)}
                 >
-                  حفظ
+                  حفظ هذا الفرد
                 </button>
                 <button
                   className="btn-ghost !text-destructive !border-destructive/40"
@@ -788,6 +850,25 @@ function EditFamilyPage() {
           </div>
         </div>
       </section>
+
+      <div className="sticky bottom-3 z-40 pt-2">
+        <div className="card-elev border-2 border-primary/40 bg-card/95 backdrop-blur p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+          <div className="text-sm">
+            <div className="font-bold">حفظ التعديلات</div>
+            <div className="text-muted-foreground text-xs mt-0.5">
+              يحفظ بيانات كل الأفراد + السجل والسكن دفعة واحدة
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-primary min-w-[10rem]"
+            disabled={savingAll}
+            onClick={() => void saveAllChanges()}
+          >
+            {savingAll ? "جاري الحفظ..." : "حفظ الكل"}
+          </button>
+        </div>
+      </div>
 
       <ConfirmDeleteDialog
         open={!!pendingDeleteMember}

@@ -261,7 +261,7 @@ function NewFamily() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">استمارة عائلية جديدة</h1>
@@ -269,10 +269,17 @@ function NewFamily() {
             سجّل بيانات الشخص الرئيسي أولاً، ثم أضف أفراد عائلته.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className={`chip ${step === 1 ? "!bg-primary !text-primary-foreground" : ""}`}>١ · الشخص والسجل</span>
-          <span className="text-muted-foreground">←</span>
-          <span className={`chip ${step === 2 ? "!bg-primary !text-primary-foreground" : ""}`}>٢ · أفراد العائلة</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {step === 2 && (
+            <button className="btn-primary" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+              {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
+            </button>
+          )}
+          <div className="flex items-center gap-2 text-sm">
+            <span className={`chip ${step === 1 ? "!bg-primary !text-primary-foreground" : ""}`}>١ · الشخص والسجل</span>
+            <span className="text-muted-foreground">←</span>
+            <span className={`chip ${step === 2 ? "!bg-primary !text-primary-foreground" : ""}`}>٢ · أفراد العائلة</span>
+          </div>
         </div>
       </div>
 
@@ -521,6 +528,22 @@ function NewFamily() {
               حدث خطأ أثناء الحفظ: {(mutation.error as Error).message}
             </div>
           )}
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="sticky bottom-3 z-40">
+          <div className="card-elev border-2 border-primary/40 bg-card/95 backdrop-blur p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+            <div className="text-sm">
+              <div className="font-bold">حفظ الاستمارة الجديدة</div>
+              <div className="text-muted-foreground text-xs mt-0.5">
+                رب العائلة + كل الأفراد المضافين
+              </div>
+            </div>
+            <button className="btn-primary min-w-[10rem]" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+              {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
+            </button>
+          </div>
         </div>
       )}
 

@@ -231,27 +231,40 @@ function NewFamily() {
   const [members, setMembers] = useState<IndividualDraft[]>([]);
   const [pendingDeleteIdx, setPendingDeleteIdx] = useState<number | null>(null);
 
-  const canProceed =
-    !!family.registry_district.trim() &&
-    !!family.registry_town.trim() &&
-    !!head.first_name.trim() &&
-    !!head.last_name.trim();
-
   const mutation = useMutation({
     mutationFn: async () => {
-      const familyLastName = head.last_name.trim();
-      const all = [head, ...members]
-        .map((i) => ({
-          ...i,
-          first_name: i.first_name.trim(),
-          last_name: i.last_name.trim() || familyLastName,
-          birth_year: i.birth_year ? parseInt(i.birth_year, 10) : null,
-        }))
-        .filter((i) => i.first_name);
-      if (all.length === 0) {
-        throw new Error("لازم على الأقل اسم الشخص الرئيسي.");
-      }
-      return createFamilyWithIndividuals(family as any, all as any);
+      const familyLastName = head.last_name.trim() || "غير محدد";
+      const all = [head, ...members].map((i) => ({
+        ...i,
+        first_name: i.first_name.trim() || "بدون اسم",
+        last_name: i.last_name.trim() || familyLastName,
+        father_name: i.father_name.trim() || null,
+        mother_name: i.mother_name.trim() || null,
+        birth_year: i.birth_year ? parseInt(i.birth_year, 10) : null,
+        mobile: i.mobile.trim() || null,
+        current_residence: i.current_residence.trim() || null,
+        preferred_candidate: i.preferred_candidate.trim() || null,
+      }));
+      const payload = {
+        ...family,
+        registry_district: family.registry_district.trim() || "غير محدد",
+        registry_town: family.registry_town.trim() || "غير محدد",
+        sect: family.sect.trim() || null,
+        registry_number: family.registry_number.trim() || null,
+        winter_country: family.winter_country.trim() || null,
+        winter_governorate: family.winter_governorate.trim() || null,
+        winter_district: family.winter_district.trim() || null,
+        winter_town: family.winter_town.trim() || null,
+        winter_street: family.winter_street.trim() || null,
+        winter_phone: family.winter_phone.trim() || null,
+        summer_country: family.summer_country.trim() || null,
+        summer_governorate: family.summer_governorate.trim() || null,
+        summer_district: family.summer_district.trim() || null,
+        summer_town: family.summer_town.trim() || null,
+        summer_street: family.summer_street.trim() || null,
+        summer_phone: family.summer_phone.trim() || null,
+      };
+      return createFamilyWithIndividuals(payload as any, all as any);
     },
     onSuccess: () => navigate({ to: "/individuals" }),
   });
@@ -260,21 +273,23 @@ function NewFamily() {
     setMembers((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
   };
 
+  const saveButton = (
+    <button className="btn-primary" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+      {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
+    </button>
+  );
+
   return (
     <div className="space-y-6 pb-24">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">استمارة عائلية جديدة</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            سجّل بيانات الشخص الرئيسي أولاً، ثم أضف أفراد عائلته.
+            فيك تترك حقول فاضية وتكمّل لاحقاً — الحفظ متاح بكل خطوة.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {step === 2 && (
-            <button className="btn-primary" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-              {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
-            </button>
-          )}
+          {saveButton}
           <div className="flex items-center gap-2 text-sm">
             <span className={`chip ${step === 1 ? "!bg-primary !text-primary-foreground" : ""}`}>١ · الشخص والسجل</span>
             <span className="text-muted-foreground">←</span>
@@ -437,13 +452,9 @@ function NewFamily() {
             </div>
           </section>
 
-          <div className="flex flex-col items-end gap-2">
-            {!canProceed && (
-              <p className="text-sm text-muted-foreground">
-                لازم الاسم الأول والشهرة وقضاء وبلدة النفوس قبل المتابعة.
-              </p>
-            )}
-            <button className="btn-primary" disabled={!canProceed} onClick={() => setStep(2)}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {saveButton}
+            <button className="btn-primary" onClick={() => setStep(2)}>
               التالي — إضافة أفراد العائلة ←
             </button>
           </div>
@@ -457,17 +468,20 @@ function NewFamily() {
               <div>
                 <div className="chip mb-2 !bg-primary !text-primary-foreground">رب العائلة</div>
                 <div className="text-xl font-black">
-                  {head.first_name} {head.last_name}
+                  {head.first_name || "بدون اسم"} {head.last_name}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
                   {[head.father_name ? `ابن ${head.father_name}` : null, family.registry_town, family.registry_district]
                     .filter(Boolean)
-                    .join(" · ")}
+                    .join(" · ") || "بيانات السجل اختيارية — فيك تكمّلها لاحقاً"}
                 </div>
               </div>
-              <button className="btn-ghost" onClick={() => setStep(1)}>
-                تعديل بيانات الشخص
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {saveButton}
+                <button className="btn-ghost" onClick={() => setStep(1)}>
+                  تعديل بيانات الشخص
+                </button>
+              </div>
             </div>
           </div>
 
@@ -531,19 +545,37 @@ function NewFamily() {
         </div>
       )}
 
-      {step === 2 && (
-        <div className="sticky bottom-3 z-40">
-          <div className="card-elev border-2 border-primary/40 bg-card/95 backdrop-blur p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
-            <div className="text-sm">
-              <div className="font-bold">حفظ الاستمارة الجديدة</div>
-              <div className="text-muted-foreground text-xs mt-0.5">
-                رب العائلة + كل الأفراد المضافين
-              </div>
+      <div className="sticky bottom-3 z-40">
+        <div className="card-elev border-2 border-primary/40 bg-card/95 backdrop-blur p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+          <div className="text-sm">
+            <div className="font-bold">{step === 1 ? "الخطوة ١ — الشخص والسجل" : "الخطوة ٢ — أفراد العائلة"}</div>
+            <div className="text-muted-foreground text-xs mt-0.5">
+              الحقول الاختيارية فيك تتركها فاضية وتحفظ أو تكمّل لاحقاً
             </div>
-            <button className="btn-primary min-w-[10rem]" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-              {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
-            </button>
           </div>
+          <div className="flex flex-wrap gap-2">
+            {step === 1 ? (
+              <>
+                {saveButton}
+                <button className="btn-primary" onClick={() => setStep(2)}>
+                  التالي ←
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn-ghost" onClick={() => setStep(1)}>
+                  → العودة
+                </button>
+                {saveButton}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {mutation.error && (
+        <div className="card-elev p-4 text-destructive text-sm">
+          حدث خطأ أثناء الحفظ: {(mutation.error as Error).message}
         </div>
       )}
 

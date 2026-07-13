@@ -16,7 +16,6 @@ import {
   findSpouse,
   resolveMaritalStatus,
   parseBirthYear,
-  draftSaveWarnings,
   applyDeceasedFields,
   isDeceased,
   resolveDeceasedForSave,
@@ -427,13 +426,11 @@ function EditFamilyPage() {
 
   const [savingAll, setSavingAll] = useState(false);
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
-  const [pendingSaveWarnings, setPendingSaveWarnings] = useState<string[]>([]);
 
-  const runSaveAll = async () => {
+  const saveAllChanges = async () => {
     setSavingAll(true);
     setSaveAllError(null);
     setMessage(null);
-    setPendingSaveWarnings([]);
     try {
       await updateFamilyForm(familyId, {
         registry_district: family.registry_district.trim(),
@@ -483,15 +480,6 @@ function EditFamilyPage() {
     } finally {
       setSavingAll(false);
     }
-  };
-
-  const saveAllChanges = async () => {
-    const warnings = draftSaveWarnings([...members, ...(newMember ? [newMember] : [])]);
-    if (warnings.length) {
-      setPendingSaveWarnings(warnings);
-      return;
-    }
-    await runSaveAll();
   };
 
   const saveMember = useMutation({
@@ -927,12 +915,12 @@ function EditFamilyPage() {
         </div>
       </section>
 
-      <div className="sticky bottom-3 z-40 pt-2">
-        <div className="card-elev border-2 border-primary/40 bg-card/95 backdrop-blur p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+      <div className="sticky bottom-3 z-50 pt-2">
+        <div className="card-elev border-2 border-primary bg-card p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
           <div className="text-sm">
-            <div className="font-bold">حفظ التعديلات</div>
+            <div className="font-bold">حفظ</div>
             <div className="text-muted-foreground text-xs mt-0.5">
-              يحفظ الأفراد الموجودين + الفرد الجديد (إن وجد) + السجل والسكن
+              يحفظ كل الأفراد + الفرد الجديد + السجل والسكن — بأي وقت
             </div>
           </div>
           <button
@@ -945,16 +933,6 @@ function EditFamilyPage() {
           </button>
         </div>
       </div>
-
-      <ConfirmDeleteDialog
-        open={pendingSaveWarnings.length > 0}
-        onOpenChange={(open) => !open && setPendingSaveWarnings([])}
-        title="تنبيه قبل الحفظ"
-        description={`في نواقص: ${pendingSaveWarnings.join(" · ")}. بدك تحفظ رغم هيك؟`}
-        confirmLabel="حفظ على أي حال"
-        pending={savingAll}
-        onConfirm={() => void runSaveAll()}
-      />
 
       <ConfirmDeleteDialog
         open={!!pendingDeleteMember}

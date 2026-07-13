@@ -10,7 +10,6 @@ import {
   normalizeRelation,
   resolveMaritalStatus,
   parseBirthYear,
-  draftSaveWarnings,
   applyDeceasedFields,
   resolveDeceasedForSave,
   isDeceased,
@@ -267,7 +266,6 @@ function NewFamily() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<1 | 2>(1);
-  const [saveWarnings, setSaveWarnings] = useState<string[]>([]);
   const [family, setFamily] = useState({
     registry_district: "",
     registry_town: "",
@@ -349,20 +347,7 @@ function NewFamily() {
     },
   });
 
-  const requestSave = () => {
-    const warnings = draftSaveWarnings([head, ...members]);
-    if (warnings.length) {
-      setSaveWarnings(warnings);
-      return;
-    }
-    setSaveWarnings([]);
-    mutation.mutate();
-  };
-
-  const confirmSaveAnyway = () => {
-    setSaveWarnings([]);
-    mutation.mutate();
-  };
+  const requestSave = () => mutation.mutate();
 
   const household = [head, ...members];
   const wife = findWifePerson(members);
@@ -392,8 +377,8 @@ function NewFamily() {
   };
 
   const saveButton = (
-    <button className="btn-primary" disabled={mutation.isPending} onClick={requestSave}>
-      {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
+    <button type="button" className="btn-primary min-w-[9rem]" disabled={mutation.isPending} onClick={requestSave}>
+      {mutation.isPending ? "جاري الحفظ..." : "حفظ"}
     </button>
   );
 
@@ -403,7 +388,7 @@ function NewFamily() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">استمارة عائلية جديدة</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            فيك تترك حقول فاضية وتكمّل لاحقاً — الحفظ متاح بكل خطوة.
+            كبسة <span className="font-semibold text-foreground">حفظ</span> موجودة بكل خطوة — فيك تترك حقول فاضية وتكمّل لاحقاً.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -665,33 +650,33 @@ function NewFamily() {
               <button className="btn-ghost" onClick={() => setStep(1)}>
                 → العودة
               </button>
-              <button className="btn-primary" disabled={mutation.isPending} onClick={requestSave}>
-                {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
+              <button type="button" className="btn-primary min-w-[9rem]" disabled={mutation.isPending} onClick={requestSave}>
+                {mutation.isPending ? "جاري الحفظ..." : "حفظ"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="sticky bottom-3 z-40">
-        <div className="card-elev border-2 border-primary/40 bg-card/95 backdrop-blur p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+      <div className="sticky bottom-3 z-50">
+        <div className="card-elev border-2 border-primary bg-card p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
           <div className="text-sm">
             <div className="font-bold">{step === 1 ? "الخطوة ١ — الشخص والسجل" : "الخطوة ٢ — أفراد العائلة"}</div>
             <div className="text-muted-foreground text-xs mt-0.5">
-              الحقول الاختيارية فيك تتركها فاضية وتحفظ أو تكمّل لاحقاً
+              احفظ بأي وقت من هالخطوة — الحقول الفاضية مسموحة
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {step === 1 ? (
               <>
                 {saveButton}
-                <button className="btn-primary" onClick={() => setStep(2)}>
+                <button type="button" className="btn-ghost" onClick={() => setStep(2)}>
                   التالي ←
                 </button>
               </>
             ) : (
               <>
-                <button className="btn-ghost" onClick={() => setStep(1)}>
+                <button type="button" className="btn-ghost" onClick={() => setStep(1)}>
                   → العودة
                 </button>
                 {saveButton}
@@ -706,16 +691,6 @@ function NewFamily() {
           حدث خطأ أثناء الحفظ: {(mutation.error as Error).message}
         </div>
       )}
-
-      <ConfirmDeleteDialog
-        open={saveWarnings.length > 0}
-        onOpenChange={(open) => !open && setSaveWarnings([])}
-        title="تنبيه قبل الحفظ"
-        description={`في نواقص: ${saveWarnings.join(" · ")}. بدك تحفظ رغم هيك؟`}
-        confirmLabel="حفظ على أي حال"
-        pending={mutation.isPending}
-        onConfirm={confirmSaveAnyway}
-      />
 
       <ConfirmDeleteDialog
         open={pendingDeleteIdx !== null}

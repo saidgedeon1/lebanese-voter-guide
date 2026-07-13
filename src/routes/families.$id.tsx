@@ -368,7 +368,22 @@ function EditFamilyPage() {
       queryClient.invalidateQueries({ queryKey: ["family-summaries"] }),
       queryClient.invalidateQueries({ queryKey: ["individuals"] }),
       queryClient.invalidateQueries({ queryKey: ["family", familyId] }),
+      queryClient.invalidateQueries({ queryKey: ["family-members"] }),
+      queryClient.invalidateQueries({ queryKey: ["search"] }),
     ]);
+  };
+
+  const resolveLastName = (draft: IndividualDraft) => {
+    const relation = normalizeRelation(draft.relation) || draft.relation;
+    const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
+    return (
+      draft.last_name.trim() ||
+      (keepOwn
+        ? "غير محدد"
+        : members.find((m) => m.last_name.trim())?.last_name.trim() ||
+          data?.members.find((m) => m.last_name)?.last_name ||
+          "غير محدد")
+    );
   };
 
   const saveFamily = useMutation({
@@ -426,24 +441,26 @@ function EditFamilyPage() {
       });
       for (const draft of members) {
         if (!draft.id) continue;
-        if (!draft.first_name.trim()) throw new Error("الاسم مطلوب لكل الأفراد");
-        const relation = normalizeRelation(draft.relation) || draft.relation;
-        const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
-        const fallbackLastName =
-          draft.last_name.trim() ||
-          (keepOwn
-            ? "غير محدد"
-            : members.find((m) => m.last_name.trim())?.last_name.trim() ||
-              data?.members.find((m) => m.last_name)?.last_name ||
-              "");
-        if (!fallbackLastName) throw new Error("الشهرة مطلوبة");
         await updateIndividual(
           draft.id,
           toPayload({
             ...draft,
-            last_name: fallbackLastName,
+            first_name: draft.first_name.trim() || "بدون اسم",
+            last_name: resolveLastName(draft),
           }),
         );
+      }
+      // New member draft was previously skipped by "حفظ الكل" — save it too.
+      if (newMember) {
+        await addIndividualToFamily(
+          familyId,
+          toPayload({
+            ...newMember,
+            first_name: newMember.first_name.trim() || "بدون اسم",
+            last_name: resolveLastName(newMember),
+          }),
+        );
+        setNewMember(null);
       }
       setMessage("تم حفظ كل التعديلات (الأفراد + الاستمارة).");
       await invalidateAll();
@@ -458,26 +475,12 @@ function EditFamilyPage() {
   const saveMember = useMutation({
     mutationFn: async (draft: IndividualDraft) => {
       if (!draft.id) throw new Error("فرد غير موجود");
-      if (!draft.first_name.trim()) {
-        throw new Error("الاسم مطلوب");
-      }
-      const relation = normalizeRelation(draft.relation) || draft.relation;
-      const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
-      const fallbackLastName =
-        draft.last_name.trim() ||
-        (keepOwn
-          ? "غير محدد"
-          : members.find((m) => m.last_name.trim())?.last_name.trim() ||
-            data?.members.find((m) => m.last_name)?.last_name ||
-            "");
-      if (!fallbackLastName) {
-        throw new Error("الشهرة مطلوبة");
-      }
       return updateIndividual(
         draft.id,
         toPayload({
           ...draft,
-          last_name: fallbackLastName,
+          first_name: draft.first_name.trim() || "بدون اسم",
+          last_name: resolveLastName(draft),
         }),
       );
     },
@@ -500,26 +503,12 @@ function EditFamilyPage() {
 
   const createMember = useMutation({
     mutationFn: async (draft: IndividualDraft) => {
-      if (!draft.first_name.trim()) {
-        throw new Error("الاسم مطلوب");
-      }
-      const relation = normalizeRelation(draft.relation) || draft.relation;
-      const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
-      const fallbackLastName =
-        draft.last_name.trim() ||
-        (keepOwn
-          ? "غير محدد"
-          : members.find((m) => m.last_name.trim())?.last_name.trim() ||
-            data?.members.find((m) => m.last_name)?.last_name ||
-            "");
-      if (!fallbackLastName) {
-        throw new Error("الشهرة مطلوبة");
-      }
       return addIndividualToFamily(
         familyId,
         toPayload({
           ...draft,
-          last_name: fallbackLastName,
+          first_name: draft.first_name.trim() || "بدون اسم",
+          last_name: resolveLastName(draft),
         }),
       );
     },
@@ -921,7 +910,7 @@ function EditFamilyPage() {
           <div className="text-sm">
             <div className="font-bold">حفظ التعديلات</div>
             <div className="text-muted-foreground text-xs mt-0.5">
-              يحفظ بيانات كل الأفراد + السجل والسكن دفعة واحدة
+              يحفظ الأفراد الموجودين + الفرد الجديد (إن وجد) + السجل والسكن
             </div>
           </div>
           <button

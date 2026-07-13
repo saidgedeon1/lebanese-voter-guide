@@ -19,7 +19,7 @@ import {
   draftSaveWarnings,
   applyDeceasedFields,
   isDeceased,
-  stripDeceasedMarker,
+  resolveDeceasedForSave,
   type Individual,
 } from "@/lib/registry";
 import {
@@ -96,6 +96,11 @@ function fromIndividual(member: Individual): IndividualDraft {
 
 function toPayload(draft: IndividualDraft) {
   const relation = normalizeRelation(draft.relation) || draft.relation;
+  const deceased = resolveDeceasedForSave({
+    voter_status: draft.voter_status,
+    preferred_candidate: draft.preferred_candidate,
+    promoteLegacyMarker: false,
+  });
   return {
     relation,
     first_name: draft.first_name.trim(),
@@ -109,8 +114,8 @@ function toPayload(draft: IndividualDraft) {
     lives_with_family: draft.lives_with_family,
     is_military: draft.is_military,
     political_leaning: draft.political_leaning,
-    preferred_candidate: stripDeceasedMarker(draft.preferred_candidate) || null,
-    voter_status: draft.voter_status === "متوفّى" || isDeceased(draft) ? "متوفّى" : draft.voter_status,
+    preferred_candidate: deceased.preferred_candidate,
+    voter_status: deceased.voter_status,
     has_voted: draft.has_voted,
   };
 }

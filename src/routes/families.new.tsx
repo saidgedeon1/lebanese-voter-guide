@@ -12,7 +12,8 @@ import {
   parseBirthYear,
   draftSaveWarnings,
   applyDeceasedFields,
-  stripDeceasedMarker,
+  resolveDeceasedForSave,
+  isDeceased,
 } from "@/lib/registry";
 import {
   QUICK_ADD_RELATIONS,
@@ -224,7 +225,7 @@ function IndividualFields({
         <Toggle label="اقترع يوم الانتخاب" value={ind.has_voted} onChange={(v) => onChange({ has_voted: v })} />
         <Toggle
           label="متوفّى"
-          value={ind.voter_status === "متوفّى"}
+          value={ind.voter_status === "متوفّى" || isDeceased({ voter_status: ind.voter_status, preferred_candidate: ind.preferred_candidate })}
           onChange={(v) => onChange(applyDeceasedFields(ind, v))}
           danger
         />
@@ -295,6 +296,11 @@ function NewFamily() {
       const all = [head, ...members].map((i) => {
         const relation = normalizeRelation(i.relation) || i.relation;
         const keepOwn = relation === "زوجة" || relation === "كنة" || relation === "صهر";
+        const deceased = resolveDeceasedForSave({
+          voter_status: i.voter_status,
+          preferred_candidate: i.preferred_candidate,
+          promoteLegacyMarker: true,
+        });
         return {
           ...i,
           relation,
@@ -305,9 +311,9 @@ function NewFamily() {
           birth_year: parseBirthYear(i.birth_year),
           mobile: i.mobile.trim() || null,
           current_residence: i.current_residence.trim() || null,
-          preferred_candidate: stripDeceasedMarker(i.preferred_candidate) || null,
+          preferred_candidate: deceased.preferred_candidate,
           marital_status: resolveMaritalStatus(relation, i.marital_status),
-          voter_status: i.voter_status === "متوفّى" ? "متوفّى" : i.voter_status || "مقيم",
+          voter_status: deceased.voter_status,
         };
       });
       const payload = {
@@ -376,8 +382,11 @@ function NewFamily() {
       return findWifePerson(others) || (person === head ? wife : undefined);
     }
     if (rel === "كنة") {
-      const sons = others.filter((m) => normalizeRelation(m.relation) === "ابن" && m.marital_status === "متزوج");
-      return sons.length === 1 ? sons[0] : others.find((m) => normalizeRelation(m.relation) === "ابن");
+      const sons = others.filter((m) => normalizeRelation(m.relation) === "ابن");
+      const marriedSons = sons.filter((m) => m.marital_status === "متزوج");
+      if (marriedSons.length === 1) return marriedSons[0];
+      if (sons.length === 1) return sons[0];
+      return undefined;
     }
     return undefined;
   };

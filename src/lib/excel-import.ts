@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import {
-  createFamilyWithIndividuals,
+  upsertFamilyWithIndividuals,
   type FamilyForm,
   type Individual,
   MARITAL_OPTIONS,
@@ -10,6 +10,8 @@ import {
   normalizeVoterStatus,
   parseBirthYear,
   resolveMaritalStatus,
+  resolveDeceasedForSave,
+  stripDeceasedMarker,
 } from "@/lib/registry";
 
 export const EXCEL_HEADERS = [
@@ -68,7 +70,7 @@ function cell(raw: Record<string, unknown>, key: string) {
   return String(value).trim();
 }
 
-function parseBool(value: string, fallback = false) {
+function parseBool(value: string, fallback: boolean) {
   if (!value) return fallback;
   const normalized = value.toLowerCase();
   if (["نعم", "yes", "true", "1", "y"].includes(normalized)) return true;
@@ -82,22 +84,23 @@ function pickOption(value: string, options: readonly string[], fallback: string)
   return match ?? fallback;
 }
 
-function pickRelation(value: string) {
-  const normalized = normalizeRelation(value);
+function pickRelation(value: string, errors: string[]) {
+  const raw = (value ?? "").trim();
+  if (!raw) {
+    errors.push("صلة القرابة مطلوبة");
+    return "ابن";
+  }
+  const normalized = normalizeRelation(raw);
   if ((RELATION_OPTIONS as readonly string[]).includes(normalized)) return normalized;
-  return pickOption(value, RELATION_OPTIONS, "رب العائلة");
+  errors.push(`صلة القرابة غير معروفة: ${raw}`);
+  return normalized || raw;
 }
 
 function familyKeyFrom(raw: Record<string, unknown>, lastName: string) {
   const explicit = cell(raw, "مفتاح العائلة");
   if (explicit) return explicit;
 
-  return [
-    cell(raw, "قضاء النفوس"),
-    cell(raw, "بلدة النفوس"),
-    cell(raw, "رقم السجل"),
-    lastName,
-  ]
+  return [cell(raw, "قضاء النفوس"), cell(raw, "بلدة النفوس"), cell(raw, "رقم السجل"), lastName]
     .filter(Boolean)
     .join(" | ");
 }
@@ -139,56 +142,18 @@ export function downloadImportTemplate() {
       "",
       "",
     ],
-    [
-      "حداد-1",
-      "الشوف",
-      "بريح",
-      "ماروني",
-      "12",
-      "زوجة",
-      "نانسي",
-      "حداد",
-      "ميشال",
-      "روز أبي نادر",
-      "1975",
-      "03111111",
-      "جونيه - الصفرا",
-      "متزوج",
-      "مقيم",
-      "مؤيد",
-      "",
-      "نعم",
-      "لا",
-      "لا",
-      "لبنان",
-      "جبل لبنان",
-      "كسروان",
-      "الصفرا",
-      "",
-      "",
-      "لبنان",
-      "جبل لبنان",
-      "الشوف",
-      "بريح",
-      "",
-      "",
-    ],
   ];
-
   const sheet = XLSX.utils.aoa_to_sheet(sample);
   const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, "استيراد");
-  XLSX.writeFile(book, "قالب-استيراد-الناخبين.xlsx");
+  XLSX.utils.book_append_sheet(book, sheet, "استمارة");
+  XLSX.writeFile(book, "نموذج-استيراد-عائلات.xlsx");
 }
 
 export async function parseExcelFile(file: File): Promise<ExcelImportPreview> {
   const buffer = await file.arrayBuffer();
   const book = XLSX.read(buffer, { type: "array" });
   const sheetName = book.SheetNames[0];
-  if (!sheetName) {
-    throw new Error("ملف الإكسل فارغ.");
-  }
-
+  if (!sheetName) throw new Error("الملف لا يحتوي على ورقة.");
   const sheet = book.Sheets[sheetName];
   const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: "",
@@ -201,7 +166,7 @@ export async function parseExcelFile(file: File): Promise<ExcelImportPreview> {
     const lastName = cell(raw, "الشهرة");
     const district = cell(raw, "قضاء النفوس");
     const town = cell(raw, "بلدة النفوس");
-    const relation = pickRelation(cell(raw, "صلة القرابة"));
+    const relation = pickRelation(cell(raw, "صلة القرابة"), errors);
 
     if (!firstName) errors.push("الاسم الأول مطلوب");
     if (!lastName) errors.push("الشهرة مطلوبة");
@@ -209,9 +174,17 @@ export async function parseExcelFile(file: File): Promise<ExcelImportPreview> {
     if (!town) errors.push("بلدة النفوس مطلوبة");
 
     const familyKey = familyKeyFrom(raw, lastName) || `صف-${index + 2}`;
-    const rawVoter = cell(raw, "وضع الناخب");
-    const rawPreferred = cell(raw, "الصوت التفضيلي");
-    const voterStatus = normalizeVoterStatus(rawVoter || (/متوف/.test(rawPreferred) ? "متوفّى" : "مقيم"));
+    const rawMarital = cell(raw, "الوضع العائلي");
+    const marital = resolveMaritalStatus(relation, rawMarital);
+    if (rawMarital && !(MARITAL_OPTIONS as readonly string[]).includes(marital as (typeof MARITAL_OPTIONS)[number])) {
+      errors.push(`الوضع العائلي غير معروف: ${rawMarital}`);
+    }
+
+    const deceased = resolveDeceasedForSave({
+      voter_status: normalizeVoterStatus(cell(raw, "وضع الناخب")),
+      preferred_candidate: cell(raw, "الصوت التفضيلي"),
+      promoteLegacyMarker: true,
+    });
 
     return {
       rowNumber: index + 2,
@@ -243,12 +216,12 @@ export async function parseExcelFile(file: File): Promise<ExcelImportPreview> {
         birth_year: parseBirthYear(cell(raw, "سنة الولادة")),
         mobile: cell(raw, "الجوال") || null,
         current_residence: cell(raw, "السكن الحالي") || null,
-        marital_status: resolveMaritalStatus(relation, cell(raw, "الوضع العائلي")),
+        marital_status: marital,
         lives_with_family: parseBool(cell(raw, "السكن مع الأهل"), true),
         is_military: parseBool(cell(raw, "عسكري"), false),
         political_leaning: pickOption(cell(raw, "الميول السياسية"), POLITICAL_OPTIONS, "غير مهتم"),
-        preferred_candidate: rawPreferred || null,
-        voter_status: voterStatus,
+        preferred_candidate: deceased.preferred_candidate,
+        voter_status: deceased.voter_status,
         has_voted: parseBool(cell(raw, "اقترع"), false),
       },
       errors,
@@ -279,15 +252,46 @@ export async function importExcelRows(rows: ExcelImportRow[]) {
   }
 
   let importedFamilies = 0;
+  let updatedFamilies = 0;
   let importedPeople = 0;
+  let updatedPeople = 0;
+  let addedPeople = 0;
 
   for (const familyRows of grouped.values()) {
     const family = familyRows[0]!.family;
-    const individuals = familyRows.map((row) => row.individual);
-    await createFamilyWithIndividuals(family, individuals);
-    importedFamilies += 1;
-    importedPeople += individuals.length;
+    const individuals = familyRows.map((row) => {
+      const deceased = resolveDeceasedForSave({
+        voter_status: row.individual.voter_status,
+        preferred_candidate: row.individual.preferred_candidate,
+        promoteLegacyMarker: true,
+      });
+      return {
+        ...row.individual,
+        preferred_candidate: deceased.preferred_candidate ?? stripDeceasedMarker(row.individual.preferred_candidate),
+        voter_status: deceased.voter_status,
+      };
+    });
+    const matchLastName =
+      individuals.find((i) => i.last_name)?.last_name ||
+      familyRows[0]!.individual.last_name ||
+      "";
+
+    const result = await upsertFamilyWithIndividuals(family, individuals, matchLastName);
+    if (result.created) {
+      importedFamilies += 1;
+      importedPeople += individuals.length;
+    } else {
+      updatedFamilies += 1;
+      updatedPeople += result.updatedPeople;
+      addedPeople += result.addedPeople;
+    }
   }
 
-  return { importedFamilies, importedPeople };
+  return {
+    importedFamilies,
+    importedPeople,
+    updatedFamilies,
+    updatedPeople,
+    addedPeople,
+  };
 }

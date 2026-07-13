@@ -62,10 +62,12 @@ function IndividualsList() {
   const [viewing, setViewing] = useState<ListedIndividual | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ListedIndividual | null>(null);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data: listResult, isLoading, refetch } = useQuery({
     queryKey: ["individuals", search, residence, political, town, voterFilter],
     queryFn: () => listIndividuals({ search, residence, political, town, voterFilter }),
   });
+  const data = listResult?.people;
+  const truncated = listResult?.truncated;
 
   const { data: familyMembers, isLoading: familyLoading } = useQuery({
     queryKey: ["family-members", viewing?.family_form_id],
@@ -156,6 +158,9 @@ function IndividualsList() {
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           <span className="chip">المعروض: {(data?.length ?? 0).toLocaleString("ar-EG")}</span>
+          {truncated ? (
+            <span className="chip !bg-destructive/15 !text-destructive">عرض أول ٥٠٠٠ فرد فقط</span>
+          ) : null}
           <button className="btn-primary" onClick={exportCsv} disabled={!data?.length}>
             تصدير CSV ↓
           </button>

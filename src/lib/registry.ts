@@ -129,11 +129,28 @@ export function applyDeceasedFields(
   };
 }
 
-/** @deprecated use applyDeceasedFields */
-export function applyDeceasedToVoterStatus(currentStatus: string, deceased: boolean) {
-  if (deceased) return "متوفّى";
-  if ((currentStatus ?? "").trim() === "متوفّى") return "مقيم";
-  return currentStatus || "مقيم";
+/** Trust voter_status on save; strip legacy متوف markers from preferred. Never re-stick from preferred text. */
+export function resolveDeceasedForSave(input: {
+  voter_status?: string | null;
+  preferred_candidate?: string | null;
+  /** If true, promote legacy متوف in preferred → متوفّى (new form / import). */
+  promoteLegacyMarker?: boolean;
+}) {
+  const preferredRaw = input.preferred_candidate ?? "";
+  const statusRaw = (input.voter_status ?? "").trim();
+  const legacy = /متوف/.test(preferredRaw);
+  let voter_status = statusRaw || "مقيم";
+  if (voter_status === "متوفّى") {
+    // keep
+  } else if (input.promoteLegacyMarker && legacy) {
+    voter_status = "متوفّى";
+  } else if (voter_status !== "مغترب" && voter_status !== "مقيم" && voter_status !== "متوفّى") {
+    voter_status = normalizeVoterStatus(voter_status);
+  }
+  return {
+    voter_status,
+    preferred_candidate: stripDeceasedMarker(preferredRaw) || null,
+  };
 }
 
 export function normalizeVoterStatus(value: string | null | undefined) {
@@ -386,12 +403,11 @@ function toFamilySummary(family: FamilyForm & { individuals?: Individual[] | nul
     members,
     family_name: getFamilyName(members, family.registry_town),
     member_count: members.length,
-    eligible_voters: members.filter(
-      (member) =>
-        !isDeceased(member) &&
-        !member.is_military &&
-        (getAge(member.birth_year) ?? 999) >= 21,
-    ).length,
+    eligible_voters: members.filter((member) => {
+      if (isDeceased(member) || member.is_military) return false;
+      const age = getAge(member.birth_year);
+      return age !== null && age >= 21;
+    }).length,
     male_count: members.filter((member) => inferGender(member.relation) === "male").length,
     female_count: members.filter((member) => inferGender(member.relation) === "female").length,
     supporter_count: members.filter((member) => member.political_leaning === "مؤيد").length,
@@ -462,6 +478,7 @@ export async function listIndividuals(filters: {
   const { data, error } = await q;
   if (error) throw error;
 
+  const rawCount = (data ?? []).length;
   let rows = (data ?? []) as Array<
     Individual & {
       family: FamilyForm;
@@ -516,7 +533,7 @@ export async function listIndividuals(filters: {
     });
   }
 
-  return rows.map((row) => {
+  const people = rows.map((row) => {
     const relatives = byFamilyAll.get(row.family_form_id) ?? [];
     const spouse = findSpouse(row, relatives);
 
@@ -528,13 +545,15 @@ export async function listIndividuals(filters: {
         : null,
     };
   });
+
+  return { people, truncated: rawCount >= 5000 };
 }
 
 export async function searchByName(name: string) {
   const raw = name.trim();
-  if (!raw) return [] as (Individual & { family: FamilyForm })[];
+  if (!raw) return { results: [] as (Individual & { family: FamilyForm })[], truncated: false };
   const tokens = raw.split(/\s+/).filter(Boolean);
-  if (!tokens.length) return [];
+  if (!tokens.length) return { results: [] as (Individual & { family: FamilyForm })[], truncated: false };
 
   const { data, error } = await sb
     .from("individuals")
@@ -543,11 +562,11 @@ export async function searchByName(name: string) {
     .limit(5000);
   if (error) throw error;
 
-  return ((data ?? []) as (Individual & { family: FamilyForm })[])
+  const rawCount = (data ?? []).length;
+  const results = ((data ?? []) as (Individual & { family: FamilyForm })[])
     .filter((row) => {
       const fields = [row.first_name, row.father_name, row.last_name, row.mother_name];
 
-      // الاسم الثلاثي: الاسم + اسم الأب + الشهرة
       if (tokens.length >= 3) {
         const [a, b, c] = tokens;
         if (
@@ -559,7 +578,6 @@ export async function searchByName(name: string) {
         }
       }
 
-      // اسم + شهرة أو اسم + أب
       if (tokens.length === 2) {
         const [a, b] = tokens;
         if (
@@ -568,7 +586,6 @@ export async function searchByName(name: string) {
         ) {
           return true;
         }
-        // compound English surname: "abu assi", "el feghali"
         if (nameTokenMatches(row.first_name, a!) && nameTokenMatches(row.last_name, `${a} ${b}`)) {
           return true;
         }
@@ -577,13 +594,9 @@ export async function searchByName(name: string) {
         }
       }
 
-      // Full query as one alias (e.g. "el feghali")
       if (nameFieldsMatch(fields, [raw])) return true;
-
-      // Every token matches some name field (Arabic or English)
       if (nameFieldsMatch(fields, tokens)) return true;
 
-      // Also match registry town / number for Arabic queries
       const needle = normalizeArabic(raw);
       const blob = normalizeArabic(
         [row.relation, row.family?.registry_town ?? "", row.family?.registry_number ?? ""].join(" "),
@@ -596,6 +609,8 @@ export async function searchByName(name: string) {
       return a.first_name.localeCompare(b.first_name, "ar");
     })
     .slice(0, 150);
+
+  return { results, truncated: rawCount >= 5000 };
 }
 
 export async function getFamilyMembers(family_form_id: number) {
@@ -627,8 +642,9 @@ export async function listFamilySummaries(filters: {
   if (error) throw error;
 
   const search = normalizeArabic(filters.search);
+  const rawCount = (data ?? []).length;
 
-  return ((data ?? []) as Array<FamilyForm & { individuals?: Individual[] | null }>)
+  const families = ((data ?? []) as Array<FamilyForm & { individuals?: Individual[] | null }>)
     .map(toFamilySummary)
     .filter((family) => {
       if (filters.political && !family.members.some((member) => member.political_leaning === filters.political)) {
@@ -656,6 +672,8 @@ export async function listFamilySummaries(filters: {
 
       return haystacks.some((value) => normalizeArabic(value).includes(search));
     });
+
+  return { families, truncated: rawCount >= 500 };
 }
 
 export async function createFamilyWithIndividuals(
@@ -673,6 +691,60 @@ export async function createFamilyWithIndividuals(
     }
   }
   return fam as FamilyForm;
+}
+
+/** Update existing family matched by قضاء + بلدة + رقم السجل + شهرة, or create new. */
+export async function upsertFamilyWithIndividuals(
+  family: Omit<FamilyForm, "id" | "created_at">,
+  individuals: Array<Omit<Individual, "id" | "family_form_id">>,
+  matchLastName: string,
+) {
+  let q = sb
+    .from("family_forms")
+    .select("*, individuals(*)")
+    .eq("registry_district", family.registry_district)
+    .eq("registry_town", family.registry_town)
+    .limit(40);
+  if (family.registry_number) {
+    q = q.eq("registry_number", family.registry_number);
+  } else {
+    q = q.is("registry_number", null);
+  }
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const needle = normalizeArabic(matchLastName);
+  const existing = ((data ?? []) as Array<FamilyForm & { individuals?: Individual[] | null }>).find((fam) =>
+    (fam.individuals ?? []).some((m) => normalizeArabic(m.last_name) === needle),
+  );
+
+  if (!existing) {
+    const created = await createFamilyWithIndividuals(family, individuals);
+    return { family: created, created: true, updatedPeople: 0, addedPeople: individuals.length };
+  }
+
+  await updateFamilyForm(existing.id, family);
+  let updatedPeople = 0;
+  let addedPeople = 0;
+  const members = existing.individuals ?? [];
+
+  for (const person of individuals) {
+    const match = members.find(
+      (m) =>
+        normalizeArabic(m.first_name) === normalizeArabic(person.first_name) &&
+        normalizeArabic(m.father_name) === normalizeArabic(person.father_name) &&
+        normalizeRelation(m.relation) === normalizeRelation(person.relation),
+    );
+    if (match) {
+      await updateIndividual(match.id, { ...person, family_form_id: existing.id });
+      updatedPeople += 1;
+    } else {
+      await addIndividualToFamily(existing.id, person);
+      addedPeople += 1;
+    }
+  }
+
+  return { family: existing as FamilyForm, created: false, updatedPeople, addedPeople };
 }
 
 export async function getFamilyById(id: number) {

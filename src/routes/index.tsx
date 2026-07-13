@@ -170,13 +170,15 @@ function Dashboard() {
 
   const { data, isLoading, error } = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
   const {
-    data: families,
+    data: familyResult,
     isLoading: isLoadingFamilies,
     error: familiesError,
   } = useQuery({
     queryKey: ["family-summaries", search, district, town, political],
     queryFn: () => listFamilySummaries({ search, district, town, political }),
   });
+  const families = familyResult?.families;
+  const familiesTruncated = familyResult?.truncated;
 
   const totals = useMemo(() => {
     const rows = families ?? [];
@@ -309,6 +311,9 @@ function Dashboard() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="chip">العائلات: {(families?.length ?? 0).toLocaleString("ar-EG")}</span>
+            {familiesTruncated ? (
+              <span className="chip !bg-destructive/15 !text-destructive">عرض أول ٥٠٠ عائلة فقط</span>
+            ) : null}
             <span className="chip">الأفراد: {totals.members.toLocaleString("ar-EG")}</span>
             <span className="chip">الناخبون: {totals.voters.toLocaleString("ar-EG")}</span>
             <span className="chip">الذكور: {totals.male.toLocaleString("ar-EG")}</span>

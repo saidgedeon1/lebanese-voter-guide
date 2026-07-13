@@ -27,11 +27,13 @@ function SearchPage() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<(Individual & { family: FamilyForm }) | null>(null);
 
-  const { data: results, isFetching, error: searchError } = useQuery({
+  const { data: searchResult, isFetching, error: searchError } = useQuery({
     queryKey: ["search", q],
     queryFn: () => searchByName(q),
     enabled: q.trim().length >= 1,
   });
+  const results = searchResult?.results;
+  const searchTruncated = searchResult?.truncated;
 
   const { data: family } = useQuery({
     queryKey: ["family-members", selected?.family_form_id],
@@ -76,6 +78,9 @@ function SearchPage() {
             {!isFetching && !searchError && results?.length === 0 && (
               <div className="text-sm text-muted-foreground p-3">لا توجد نتائج مطابقة.</div>
             )}
+            {searchTruncated ? (
+              <div className="text-xs text-destructive p-2">البحث على أول ٥٠٠٠ فرد فقط — النتائج قد تكون ناقصة.</div>
+            ) : null}
             {results?.map((r) => (
               <button
                 key={r.id}

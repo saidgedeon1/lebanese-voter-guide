@@ -60,7 +60,7 @@ function ImportPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">استيراد من Excel</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            نزّل القالب، عبّي العائلات والأفراد، ثم ارفع الملف لاستيرادهم دفعة واحدة.
+            نزّل القالب، عبّي العائلات والأفراد، ثم ارفع الملف. إذا العائلة موجودة (نفس القضاء والبلدة ورقم السجل والشهرة) بتنحدّث بدل ما تتكرّر.
           </p>
         </div>
         <Link to="/" className="btn-ghost">

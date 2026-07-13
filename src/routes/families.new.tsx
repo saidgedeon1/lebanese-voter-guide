@@ -537,11 +537,6 @@ function NewFamily() {
               </button>
             </div>
           </div>
-          {mutation.error && (
-            <div className="card-elev p-4 text-destructive text-sm">
-              حدث خطأ أثناء الحفظ: {(mutation.error as Error).message}
-            </div>
-          )}
         </div>
       )}
 

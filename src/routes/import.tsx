@@ -31,6 +31,8 @@ function ImportPage() {
         queryClient.invalidateQueries({ queryKey: ["stats"] }),
         queryClient.invalidateQueries({ queryKey: ["family-summaries"] }),
         queryClient.invalidateQueries({ queryKey: ["individuals"] }),
+        queryClient.invalidateQueries({ queryKey: ["family-members"] }),
+        queryClient.invalidateQueries({ queryKey: ["search"] }),
       ]);
       navigate({ to: "/" });
     },

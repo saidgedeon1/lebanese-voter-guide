@@ -8,6 +8,7 @@ import {
   displayMaritalStatus,
   findSpouse,
   getFamilyMembers,
+  isDeceased,
   listIndividuals,
   normalizeRelation,
   POLITICAL_OPTIONS,
@@ -39,7 +40,12 @@ function getAge(birthYear: number | null | undefined) {
   return age;
 }
 
-function canVote(birthYear: number | null | undefined, isMilitary: boolean | null | undefined) {
+function canVote(
+  birthYear: number | null | undefined,
+  isMilitary: boolean | null | undefined,
+  person?: Pick<Individual, "voter_status" | "preferred_candidate"> | null,
+) {
+  if (person && isDeceased(person)) return false;
   if (isMilitary) return false;
   const age = getAge(birthYear);
   if (age === null) return null;
@@ -52,12 +58,13 @@ function IndividualsList() {
   const [residence, setResidence] = useState("");
   const [political, setPolitical] = useState("");
   const [town, setTown] = useState("");
+  const [voterFilter, setVoterFilter] = useState<"" | "eligible_not_voted" | "voted" | "deceased" | "expat" | "military">("");
   const [viewing, setViewing] = useState<ListedIndividual | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ListedIndividual | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["individuals", search, residence, political, town],
-    queryFn: () => listIndividuals({ search, residence, political, town }),
+    queryKey: ["individuals", search, residence, political, town, voterFilter],
+    queryFn: () => listIndividuals({ search, residence, political, town, voterFilter }),
   });
 
   const { data: familyMembers, isLoading: familyLoading } = useQuery({
@@ -95,11 +102,13 @@ function IndividualsList() {
       "السكن الحالي",
       "الميول",
       "يحق له الاقتراع",
+      "اقترع",
+      "متوفّى",
       "الجوال",
       "عسكري",
     ];
     const rows = data.map((r) => {
-      const eligible = canVote(r.birth_year, r.is_military);
+      const eligible = canVote(r.birth_year, r.is_military, r);
       return [
         r.family?.registry_number ?? "",
         r.first_name,
@@ -112,6 +121,8 @@ function IndividualsList() {
         r.current_residence ?? "",
         r.political_leaning ?? "",
         eligible === null ? "غير محدد" : eligible ? "نعم" : "لا",
+        r.has_voted ? "نعم" : "لا",
+        isDeceased(r) ? "نعم" : "لا",
         r.mobile ?? "",
         r.is_military ? "نعم" : "لا",
       ];
@@ -131,7 +142,7 @@ function IndividualsList() {
   const spouseFromFamily =
     viewing && familyMembers ? findSpouse(viewing, familyMembers) : null;
 
-  const eligible = viewing ? canVote(viewing.birth_year, viewing.is_military) : null;
+  const eligible = viewing ? canVote(viewing.birth_year, viewing.is_military, viewing) : null;
   const age = viewing ? getAge(viewing.birth_year) : null;
 
   return (
@@ -151,9 +162,9 @@ function IndividualsList() {
         </div>
       </div>
 
-      <div className="card-elev p-4 sm:p-5 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="card-elev p-4 sm:p-5 grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div>
-          <label className="label-ar">بحث بالاسم / الأب / الأم / الزوجة</label>
+          <label className="label-ar">بحث بالاسم / الأب / الأم</label>
           <input
             className="field"
             value={search}
@@ -177,6 +188,21 @@ function IndividualsList() {
         <div>
           <label className="label-ar">بلدة النفوس</label>
           <input className="field" value={town} onChange={(e) => setTown(e.target.value)} placeholder="بحث جزئي..." />
+        </div>
+        <div>
+          <label className="label-ar">حالة الناخب</label>
+          <select
+            className="field"
+            value={voterFilter}
+            onChange={(e) => setVoterFilter(e.target.value as typeof voterFilter)}
+          >
+            <option value="">— الكل —</option>
+            <option value="eligible_not_voted">يحق له وما اقترع</option>
+            <option value="voted">اقترع</option>
+            <option value="deceased">متوفّى</option>
+            <option value="expat">مغترب</option>
+            <option value="military">عسكري</option>
+          </select>
         </div>
       </div>
 
@@ -211,15 +237,17 @@ function IndividualsList() {
                 </tr>
               )}
               {data?.map((r) => {
-                const rowEligible = canVote(r.birth_year, r.is_military);
+                const rowEligible = canVote(r.birth_year, r.is_military, r);
                 const rowAge = getAge(r.birth_year);
+                const deceased = isDeceased(r);
 
                 return (
-                  <tr key={r.id} className={`border-t border-border ${r.is_military ? "bg-destructive/5" : ""}`}>
+                  <tr key={r.id} className={`border-t border-border ${r.is_military || deceased ? "bg-destructive/5" : ""}`}>
                     <td className="p-3 font-semibold">{r.family?.registry_number || "—"}</td>
                     <td className="p-3">
                       <div className="font-semibold">
                         {r.first_name} {r.last_name}
+                        {deceased ? <span className="chip !bg-muted mr-2 text-xs">متوفّى</span> : null}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                         <div>
@@ -269,8 +297,7 @@ function IndividualsList() {
                         <Link
                           to="/families/$id"
                           params={{ id: String(r.family_form_id) }}
-                          search={{}}
-                          hash="members"
+                          search={{ member: r.id }}
                           className="text-primary font-semibold hover:underline"
                         >
                           تعديل
@@ -367,6 +394,7 @@ function IndividualsList() {
                 <Info label="الجوال" v={viewing.mobile} />
                 <Info label="الوضع العائلي" v={displayMaritalStatus(viewing, spouseFromFamily)} />
                 <Info label="وضع الناخب" v={viewing.voter_status} />
+                <Info label="متوفّى" v={isDeceased(viewing) ? "نعم" : "لا"} />
                 <Info label="السكن مع الأهل" v={viewing.lives_with_family ? "نعم" : "لا"} />
                 <Info label="الميول السياسية" v={viewing.political_leaning} />
                 <Info label="الصوت التفضيلي" v={viewing.preferred_candidate} />

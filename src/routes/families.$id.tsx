@@ -14,13 +14,17 @@ import {
   addIndividualToFamily,
   normalizeRelation,
   findSpouse,
+  resolveMaritalStatus,
+  parseBirthYear,
+  draftSaveWarnings,
+  applyDeceasedToVoterStatus,
+  isDeceased,
   type Individual,
 } from "@/lib/registry";
 import {
   QUICK_ADD_RELATIONS,
   defaultsForRelation,
   defaultMaritalForRelation,
-  isMarriedRelation,
   patchOnRelationChange,
   relationFieldHint,
   tripleName,
@@ -84,7 +88,7 @@ function fromIndividual(member: Individual): IndividualDraft {
     is_military: member.is_military ?? false,
     political_leaning: member.political_leaning || "غير مهتم",
     preferred_candidate: member.preferred_candidate || "",
-    voter_status: member.voter_status || "مقيم",
+    voter_status: isDeceased(member) ? "متوفّى" : member.voter_status || "مقيم",
     has_voted: member.has_voted ?? false,
   };
 }
@@ -97,14 +101,10 @@ function toPayload(draft: IndividualDraft) {
     last_name: draft.last_name.trim(),
     father_name: draft.father_name.trim() || null,
     mother_name: draft.mother_name.trim() || null,
-    birth_year: draft.birth_year ? parseInt(draft.birth_year, 10) : null,
+    birth_year: parseBirthYear(draft.birth_year),
     mobile: draft.mobile.trim() || null,
     current_residence: draft.current_residence.trim() || null,
-    marital_status: isMarriedRelation(relation)
-      ? draft.marital_status === "أعزب" || draft.marital_status === "عزباء"
-        ? "متزوج"
-        : draft.marital_status || "متزوج"
-      : draft.marital_status,
+    marital_status: resolveMaritalStatus(relation, draft.marital_status),
     lives_with_family: draft.lives_with_family,
     is_military: draft.is_military,
     political_leaning: draft.political_leaning,
@@ -292,10 +292,16 @@ function IndividualFields({
           onChange={(e) => onChange({ preferred_candidate: e.target.value })}
         />
       </Field>
-      <div className="grid grid-cols-3 gap-3 sm:col-span-2 lg:col-span-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:col-span-2 lg:col-span-3">
         <Toggle label="السكن مع الأهل" value={ind.lives_with_family} onChange={(v) => onChange({ lives_with_family: v })} />
         <Toggle label="عسكري" value={ind.is_military} onChange={(v) => onChange({ is_military: v })} danger />
         <Toggle label="اقترع يوم الانتخاب" value={ind.has_voted} onChange={(v) => onChange({ has_voted: v })} />
+        <Toggle
+          label="متوفّى"
+          value={ind.voter_status === "متوفّى" || isDeceased({ voter_status: ind.voter_status, preferred_candidate: ind.preferred_candidate })}
+          onChange={(v) => onChange({ voter_status: applyDeceasedToVoterStatus(ind.voter_status, v) })}
+          danger
+        />
       </div>
     </div>
   );
@@ -415,11 +421,13 @@ function EditFamilyPage() {
 
   const [savingAll, setSavingAll] = useState(false);
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
+  const [pendingSaveWarnings, setPendingSaveWarnings] = useState<string[]>([]);
 
-  const saveAllChanges = async () => {
+  const runSaveAll = async () => {
     setSavingAll(true);
     setSaveAllError(null);
     setMessage(null);
+    setPendingSaveWarnings([]);
     try {
       await updateFamilyForm(familyId, {
         registry_district: family.registry_district.trim(),
@@ -450,7 +458,6 @@ function EditFamilyPage() {
           }),
         );
       }
-      // New member draft was previously skipped by "حفظ الكل" — save it too.
       if (newMember) {
         await addIndividualToFamily(
           familyId,
@@ -470,6 +477,15 @@ function EditFamilyPage() {
     } finally {
       setSavingAll(false);
     }
+  };
+
+  const saveAllChanges = async () => {
+    const warnings = draftSaveWarnings([...members, ...(newMember ? [newMember] : [])]);
+    if (warnings.length) {
+      setPendingSaveWarnings(warnings);
+      return;
+    }
+    await runSaveAll();
   };
 
   const saveMember = useMutation({
@@ -923,6 +939,16 @@ function EditFamilyPage() {
           </button>
         </div>
       </div>
+
+      <ConfirmDeleteDialog
+        open={pendingSaveWarnings.length > 0}
+        onOpenChange={(open) => !open && setPendingSaveWarnings([])}
+        title="تنبيه قبل الحفظ"
+        description={`في نواقص: ${pendingSaveWarnings.join(" · ")}. بدك تحفظ رغم هيك؟`}
+        confirmLabel="حفظ على أي حال"
+        pending={savingAll}
+        onConfirm={() => void runSaveAll()}
+      />
 
       <ConfirmDeleteDialog
         open={!!pendingDeleteMember}

@@ -129,3 +129,22 @@ export const deletePersonFileFn = createServerFn({ method: "POST" })
     await del(data.url, { token });
     return { ok: true };
   });
+
+/** Best-effort cleanup of all blobs for one or more people (ignores missing token). */
+export const deleteAllFilesForPeopleFn = createServerFn({ method: "POST" })
+  .inputValidator((personIds: number[]) => personIds)
+  .handler(async ({ data: personIds }) => {
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token || !personIds?.length) return { ok: true, deleted: 0 };
+    let deleted = 0;
+    for (const personId of personIds) {
+      const result = await list({ prefix: `people/${personId}/`, token });
+      if (!result.blobs.length) continue;
+      await del(
+        result.blobs.map((b) => b.url),
+        { token },
+      );
+      deleted += result.blobs.length;
+    }
+    return { ok: true, deleted };
+  });

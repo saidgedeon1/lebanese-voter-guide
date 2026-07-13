@@ -8,12 +8,15 @@ import {
   VOTER_STATUS_OPTIONS,
   createFamilyWithIndividuals,
   normalizeRelation,
+  resolveMaritalStatus,
+  parseBirthYear,
+  draftSaveWarnings,
+  applyDeceasedToVoterStatus,
 } from "@/lib/registry";
 import {
   QUICK_ADD_RELATIONS,
   defaultsForRelation,
   defaultMaritalForRelation,
-  isMarriedRelation,
   patchOnRelationChange,
   relationFieldHint,
   tripleName,
@@ -21,6 +24,7 @@ import {
   findWifePerson,
 } from "@/lib/family-form-defaults";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/families/new")({
   component: NewFamily,
@@ -213,10 +217,16 @@ function IndividualFields({
           placeholder="اسم المرشح"
         />
       </Field>
-      <div className="grid grid-cols-3 gap-3 sm:col-span-2 lg:col-span-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:col-span-2 lg:col-span-3">
         <Toggle label="السكن مع الأهل" value={ind.lives_with_family} onChange={(v) => onChange({ lives_with_family: v })} />
         <Toggle label="عسكري" value={ind.is_military} onChange={(v) => onChange({ is_military: v })} danger />
         <Toggle label="اقترع يوم الانتخاب" value={ind.has_voted} onChange={(v) => onChange({ has_voted: v })} />
+        <Toggle
+          label="متوفّى"
+          value={ind.voter_status === "متوفّى"}
+          onChange={(v) => onChange({ voter_status: applyDeceasedToVoterStatus(ind.voter_status, v) })}
+          danger
+        />
       </div>
     </div>
   );
@@ -253,7 +263,9 @@ function Toggle({
 
 function NewFamily() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<1 | 2>(1);
+  const [saveWarnings, setSaveWarnings] = useState<string[]>([]);
   const [family, setFamily] = useState({
     registry_district: "",
     registry_town: "",
@@ -289,11 +301,12 @@ function NewFamily() {
           last_name: i.last_name.trim() || (keepOwn ? "غير محدد" : familyLastName),
           father_name: i.father_name.trim() || null,
           mother_name: i.mother_name.trim() || null,
-          birth_year: i.birth_year ? parseInt(i.birth_year, 10) : null,
+          birth_year: parseBirthYear(i.birth_year),
           mobile: i.mobile.trim() || null,
           current_residence: i.current_residence.trim() || null,
           preferred_candidate: i.preferred_candidate.trim() || null,
-          marital_status: isMarriedRelation(relation) ? "متزوج" : i.marital_status || "أعزب",
+          marital_status: resolveMaritalStatus(relation, i.marital_status),
+          voter_status: i.voter_status || "مقيم",
         };
       });
       const payload = {
@@ -317,8 +330,32 @@ function NewFamily() {
       };
       return createFamilyWithIndividuals(payload as any, all as any);
     },
-    onSuccess: () => navigate({ to: "/individuals" }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["family-summaries"] }),
+        queryClient.invalidateQueries({ queryKey: ["individuals"] }),
+        queryClient.invalidateQueries({ queryKey: ["search"] }),
+        queryClient.invalidateQueries({ queryKey: ["family-members"] }),
+      ]);
+      navigate({ to: "/individuals" });
+    },
   });
+
+  const requestSave = () => {
+    const warnings = draftSaveWarnings([head, ...members]);
+    if (warnings.length) {
+      setSaveWarnings(warnings);
+      return;
+    }
+    setSaveWarnings([]);
+    mutation.mutate();
+  };
+
+  const confirmSaveAnyway = () => {
+    setSaveWarnings([]);
+    mutation.mutate();
+  };
 
   const household = [head, ...members];
   const wife = findWifePerson(members);
@@ -345,7 +382,7 @@ function NewFamily() {
   };
 
   const saveButton = (
-    <button className="btn-primary" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+    <button className="btn-primary" disabled={mutation.isPending} onClick={requestSave}>
       {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
     </button>
   );
@@ -618,7 +655,7 @@ function NewFamily() {
               <button className="btn-ghost" onClick={() => setStep(1)}>
                 → العودة
               </button>
-              <button className="btn-primary" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+              <button className="btn-primary" disabled={mutation.isPending} onClick={requestSave}>
                 {mutation.isPending ? "جاري الحفظ..." : "حفظ الاستمارة"}
               </button>
             </div>
@@ -659,6 +696,16 @@ function NewFamily() {
           حدث خطأ أثناء الحفظ: {(mutation.error as Error).message}
         </div>
       )}
+
+      <ConfirmDeleteDialog
+        open={saveWarnings.length > 0}
+        onOpenChange={(open) => !open && setSaveWarnings([])}
+        title="تنبيه قبل الحفظ"
+        description={`في نواقص: ${saveWarnings.join(" · ")}. بدك تحفظ رغم هيك؟`}
+        confirmLabel="حفظ على أي حال"
+        pending={mutation.isPending}
+        onConfirm={confirmSaveAnyway}
+      />
 
       <ConfirmDeleteDialog
         open={pendingDeleteIdx !== null}

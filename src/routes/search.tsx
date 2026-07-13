@@ -7,6 +7,8 @@ import {
   displayMaritalStatus,
   findSpouse,
   getFamilyMembers,
+  isDeceased,
+  normalizeArabic,
   normalizeRelation,
   searchByName,
   type Individual,
@@ -186,6 +188,7 @@ function SearchPage() {
               <Info label="الجوال" v={selected.mobile} />
               <Info label="الوضع العائلي" v={displayMaritalStatus(selected, spouse)} />
               <Info label="وضع الناخب" v={selected.voter_status} />
+              <Info label="متوفّى" v={isDeceased(selected) ? "نعم" : "لا"} />
               <Info label="السكن مع الأهل" v={selected.lives_with_family == null ? null : selected.lives_with_family ? "نعم" : "لا"} />
               <Info label="عسكري" v={selected.is_military ? "نعم" : "لا"} />
               <Info label="اقترع" v={selected.has_voted ? "نعم" : "لا"} />
@@ -287,7 +290,10 @@ function FamilyTree({
   // True children of focus: they list focus as أب or أم
   const children = take(
     members.filter(
-      (m) => m.id !== focus.id && (m.father_name === focus.first_name || m.mother_name === focus.first_name),
+      (m) =>
+        m.id !== focus.id &&
+        (normalizeArabic(m.father_name) === normalizeArabic(focus.first_name) ||
+          normalizeArabic(m.mother_name) === normalizeArabic(focus.first_name)),
     ),
   );
   const childNames = new Set(children.map((c) => c.first_name));
@@ -315,7 +321,12 @@ function FamilyTree({
   const parents = take(
     members.filter((m) => {
       const rel = normalizeRelation(m.relation);
-      return rel === "والد" || rel === "والدة" || m.first_name === focus.father_name || m.first_name === focus.mother_name;
+      return (
+        rel === "والد" ||
+        rel === "والدة" ||
+        normalizeArabic(m.first_name) === normalizeArabic(focus.father_name) ||
+        normalizeArabic(m.first_name) === normalizeArabic(focus.mother_name)
+      );
     }),
   );
 

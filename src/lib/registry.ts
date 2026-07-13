@@ -73,7 +73,52 @@ export const RELATION_OPTIONS = [
 ] as const;
 export const MARITAL_OPTIONS = ["متزوج", "أعزب", "مطلق", "أرمل"] as const;
 export const POLITICAL_OPTIONS = ["مؤيد", "معارض", "رمادي", "غير مهتم"] as const;
-export const VOTER_STATUS_OPTIONS = ["مقيم", "مغترب"] as const;
+export const VOTER_STATUS_OPTIONS = ["مقيم", "مغترب", "متوفّى"] as const;
+
+/** Deceased = وضع الناخب متوفّى, or legacy marker in الصوت التفضيلي. */
+export function isDeceased(
+  person: Pick<Individual, "voter_status" | "preferred_candidate"> | null | undefined,
+) {
+  if (!person) return false;
+  if ((person.voter_status ?? "").trim() === "متوفّى") return true;
+  return /متوف/.test(person.preferred_candidate ?? "");
+}
+
+/** Keep أرمل/مطلق; only upgrade empty/single → متزوج for married relations. */
+export function resolveMaritalStatus(relation: string | null | undefined, status: string | null | undefined) {
+  const self = normalizeRelation(relation);
+  const value = (status ?? "").trim();
+  if (value === "أرمل" || value === "أرملة" || value === "مطلق" || value === "مطلقة") return value === "أرملة" ? "أرمل" : value === "مطلقة" ? "مطلق" : value;
+  if (value === "متزوج" || value === "متزوجة") return "متزوج";
+  if (MARRIED_RELATIONS.has(self) && (!value || value === "أعزب" || value === "عزباء")) return "متزوج";
+  return value || "أعزب";
+}
+
+export function parseBirthYear(value: string | null | undefined): number | null {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const year = Number.parseInt(raw, 10);
+  const current = new Date().getFullYear();
+  if (!Number.isFinite(year) || year < 1800 || year > current) return null;
+  return year;
+}
+
+export function applyDeceasedToVoterStatus(currentStatus: string, deceased: boolean) {
+  if (deceased) return "متوفّى";
+  if ((currentStatus ?? "").trim() === "متوفّى") return "مقيم";
+  return currentStatus || "مقيم";
+}
+
+export function draftSaveWarnings(
+  people: Array<{ first_name?: string; last_name?: string; birth_year?: string; relation?: string }>,
+) {
+  const warnings: string[] = [];
+  const emptyNames = people.filter((p) => !(p.first_name ?? "").trim()).length;
+  if (emptyNames) warnings.push(`${emptyNames} فرد بدون اسم أول`);
+  const badYears = people.filter((p) => (p.birth_year ?? "").trim() && parseBirthYear(p.birth_year) == null).length;
+  if (badYears) warnings.push(`${badYears} سنة ولادة غير صالحة (رح تنحفظ فاضية)`);
+  return warnings;
+}
 
 /** Normalize Arabic letters so search matches أ/إ/آ and ة/ه variants. */
 export function normalizeArabic(input: string | null | undefined) {
@@ -127,6 +172,18 @@ function isMarriedStatus(status: string | null | undefined) {
   return value === "متزوج" || value === "متزوجة";
 }
 
+function namesEqual(a: string | null | undefined, b: string | null | undefined) {
+  const left = normalizeArabic(a);
+  const right = normalizeArabic(b);
+  return Boolean(left && right && left === right);
+}
+
+function nameMentions(haystack: string | null | undefined, needle: string | null | undefined) {
+  const h = normalizeArabic(haystack);
+  const n = normalizeArabic(needle);
+  return Boolean(h && n && h.includes(n));
+}
+
 /** Find spouse within the same form: by relation, co-parentage, then household head. */
 export function findSpouse(person: Individual, members: Individual[]): Individual | null {
   if (!person || !members?.length) return null;
@@ -138,8 +195,8 @@ export function findSpouse(person: Individual, members: Individual[]): Individua
       (child) =>
         child.id !== person.id &&
         child.id !== member.id &&
-        ((child.father_name === person.first_name && child.mother_name === member.first_name) ||
-          (child.mother_name === person.first_name && child.father_name === member.first_name)),
+        ((namesEqual(child.father_name, person.first_name) && namesEqual(child.mother_name, member.first_name)) ||
+          (namesEqual(child.mother_name, person.first_name) && namesEqual(child.father_name, member.first_name))),
     );
   });
   if (coParent) return coParent;
@@ -167,14 +224,35 @@ export function findSpouse(person: Individual, members: Individual[]): Individua
   if (self === "كنة") {
     const sons = members.filter((m) => m.id !== person.id && normalizeRelation(m.relation) === "ابن");
     const marriedSons = sons.filter((m) => isMarriedStatus(m.marital_status));
+    const hinted =
+      marriedSons.find(
+        (son) =>
+          nameMentions(person.preferred_candidate, son.first_name) ||
+          nameMentions(person.mother_name, son.first_name) ||
+          nameMentions(person.father_name, son.first_name),
+      ) ||
+      sons.find(
+        (son) =>
+          nameMentions(person.preferred_candidate, son.first_name) ||
+          nameMentions(person.mother_name, son.first_name),
+      );
+    if (hinted) return hinted;
     if (marriedSons.length === 1) return marriedSons[0];
     if (sons.length === 1) return sons[0];
+    // Multiple sons and no hint → don't guess wrong husband
   }
 
   if (self === "ابن" && isMarriedStatus(person.marital_status)) {
     const daughtersInLaw = members.filter(
       (m) => m.id !== person.id && normalizeRelation(m.relation) === "كنة",
     );
+    const hinted = daughtersInLaw.find(
+      (dil) =>
+        nameMentions(dil.preferred_candidate, person.first_name) ||
+        nameMentions(dil.mother_name, person.first_name) ||
+        nameMentions(dil.father_name, person.first_name),
+    );
+    if (hinted) return hinted;
     if (daughtersInLaw.length === 1) return daughtersInLaw[0];
   }
 
@@ -196,7 +274,9 @@ export function displayMaritalStatus(person: Individual, spouse?: Individual | n
   const female = FEMALE_RELATIONS.has(self);
   let status = (person.marital_status ?? "").trim();
 
-  if (spouse || MARRIED_RELATIONS.has(self)) {
+  const widowedOrDivorced =
+    status === "أرمل" || status === "أرملة" || status === "مطلق" || status === "مطلقة";
+  if (!widowedOrDivorced && (spouse || MARRIED_RELATIONS.has(self))) {
     if (!status || status === "أعزب" || status === "عزباء") status = "متزوج";
   }
   if (!status) return "—";
@@ -271,7 +351,12 @@ function toFamilySummary(family: FamilyForm & { individuals?: Individual[] | nul
     members,
     family_name: getFamilyName(members, family.registry_town),
     member_count: members.length,
-    eligible_voters: members.filter((member) => !member.is_military && (getAge(member.birth_year) ?? 999) >= 21).length,
+    eligible_voters: members.filter(
+      (member) =>
+        !isDeceased(member) &&
+        !member.is_military &&
+        (getAge(member.birth_year) ?? 999) >= 21,
+    ).length,
     male_count: members.filter((member) => inferGender(member.relation) === "male").length,
     female_count: members.filter((member) => inferGender(member.relation) === "female").length,
     supporter_count: members.filter((member) => member.political_leaning === "مؤيد").length,
@@ -293,27 +378,35 @@ export async function fetchStats() {
     { count: supporters },
     { count: military },
     { count: voted },
-    { count: deceased },
+    { count: deceasedByStatus },
+    { count: deceasedByLegacy },
   ] = await Promise.all([
     sb.from("individuals").select("*", { count: "exact", head: true }),
     sb.from("family_forms").select("*", { count: "exact", head: true }),
     sb.from("individuals").select("*", { count: "exact", head: true }).eq("political_leaning", "مؤيد"),
     sb.from("individuals").select("*", { count: "exact", head: true }).eq("is_military", true),
     sb.from("individuals").select("*", { count: "exact", head: true }).eq("has_voted", true),
-    sb.from("individuals").select("*", { count: "exact", head: true }).ilike("preferred_candidate", "%متوف%"),
+    sb.from("individuals").select("*", { count: "exact", head: true }).eq("voter_status", "متوفّى"),
+    sb
+      .from("individuals")
+      .select("*", { count: "exact", head: true })
+      .ilike("preferred_candidate", "%متوف%")
+      .neq("voter_status", "متوفّى"),
   ]);
 
   const totalPeople = individuals ?? 0;
-  const deceasedCount = deceased ?? 0;
+  const deceasedCount = (deceasedByStatus ?? 0) + (deceasedByLegacy ?? 0);
+  const votedCount = voted ?? 0;
 
   return {
     individuals: totalPeople,
     families: families ?? 0,
     supporters: supporters ?? 0,
     military: military ?? 0,
-    voted: voted ?? 0,
+    voted: votedCount,
     deceased: deceasedCount,
     living: Math.max(0, totalPeople - deceasedCount),
+    not_voted_eligible: Math.max(0, totalPeople - deceasedCount - (military ?? 0) - votedCount),
   };
 }
 
@@ -322,6 +415,7 @@ export async function listIndividuals(filters: {
   political?: string;
   town?: string;
   search?: string;
+  voterFilter?: "" | "eligible_not_voted" | "voted" | "deceased" | "expat" | "military";
 } = {}) {
   let q = sb
     .from("individuals")
@@ -343,6 +437,22 @@ export async function listIndividuals(filters: {
 
   if (filters.town) {
     rows = rows.filter((r) => r.family?.registry_town?.includes(filters.town!));
+  }
+
+  if (filters.voterFilter === "deceased") {
+    rows = rows.filter((r) => isDeceased(r));
+  } else if (filters.voterFilter === "voted") {
+    rows = rows.filter((r) => r.has_voted && !isDeceased(r));
+  } else if (filters.voterFilter === "expat") {
+    rows = rows.filter((r) => r.voter_status === "مغترب" && !isDeceased(r));
+  } else if (filters.voterFilter === "military") {
+    rows = rows.filter((r) => r.is_military);
+  } else if (filters.voterFilter === "eligible_not_voted") {
+    rows = rows.filter((r) => {
+      if (isDeceased(r) || r.is_military || r.has_voted) return false;
+      const age = getAge(r.birth_year);
+      return age !== null && age >= 21;
+    });
   }
 
   if (filters.search?.trim()) {
@@ -528,7 +638,10 @@ export async function createFamilyWithIndividuals(
   if (individuals.length > 0) {
     const rows = individuals.map((i) => ({ ...i, family_form_id: fam.id }));
     const { error: e2 } = await sb.from("individuals").insert(rows);
-    if (e2) throw e2;
+    if (e2) {
+      await sb.from("family_forms").delete().eq("id", fam.id);
+      throw e2;
+    }
   }
   return fam as FamilyForm;
 }
@@ -553,6 +666,16 @@ export async function updateFamilyForm(
 }
 
 export async function deleteFamilyForm(id: number) {
+  const { data: members } = await sb.from("individuals").select("id").eq("family_form_id", id);
+  const ids = ((members ?? []) as Array<{ id: number }>).map((m) => m.id);
+  if (ids.length) {
+    try {
+      const { deleteAllFilesForPeopleFn } = await import("@/lib/person-files");
+      await deleteAllFilesForPeopleFn({ data: ids });
+    } catch {
+      // Blob cleanup is best-effort
+    }
+  }
   const { error } = await sb.from("family_forms").delete().eq("id", id);
   if (error) throw error;
 }
@@ -567,6 +690,12 @@ export async function updateIndividual(
 }
 
 export async function deleteIndividual(id: number) {
+  try {
+    const { deleteAllFilesForPeopleFn } = await import("@/lib/person-files");
+    await deleteAllFilesForPeopleFn({ data: [id] });
+  } catch {
+    // Blob cleanup is best-effort
+  }
   const { error } = await sb.from("individuals").delete().eq("id", id);
   if (error) throw error;
 }

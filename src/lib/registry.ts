@@ -524,7 +524,11 @@ export async function fetchStats() {
       .select("*", { count: "exact", head: true })
       .ilike("preferred_candidate", "%متوف%")
       .neq("voter_status", "متوفّى"),
-    sb.from("individuals").select("*", { count: "exact", head: true }).is("birth_year", null),
+    sb
+      .from("individuals")
+      .select("*", { count: "exact", head: true })
+      .is("birth_year", null)
+      .neq("voter_status", "متوفّى"),
   ]);
 
   const totalPeople = individuals ?? 0;
@@ -539,6 +543,7 @@ export async function fetchStats() {
     voted: votedCount,
     deceased: deceasedCount,
     living: Math.max(0, totalPeople - deceasedCount),
+    // Living people without birth year (deceased never need age for checkup).
     unknown_age: unknownAge ?? 0,
   };
 }
@@ -591,8 +596,8 @@ export async function listIndividuals(filters: {
   } else if (filters.voterFilter === "military") {
     rows = rows.filter((r) => r.is_military);
   } else if (filters.voterFilter === "unknown_age") {
-    // Also catch invalid years that getAge rejects (already null from DB query, keep as safety).
-    rows = rows.filter((r) => getAge(r.birth_year) === null);
+    // Missing age only matters for the living — deceased can't vote either way.
+    rows = rows.filter((r) => getAge(r.birth_year) === null && !isDeceased(r));
   }
 
   if (filters.search?.trim()) {

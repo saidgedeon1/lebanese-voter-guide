@@ -264,7 +264,7 @@ function Dashboard() {
             />
             <div className="relative flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-sm text-muted-foreground font-medium">عمر غير محدد — للـ check-up</div>
+                <div className="text-sm text-muted-foreground font-medium">عمر غير محدد — أحياء فقط</div>
                 <div className="mt-2 text-3xl sm:text-4xl font-black tracking-tight">
                   {(isLoading ? 0 : data!.unknown_age).toLocaleString("ar-EG")}
                 </div>

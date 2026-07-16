@@ -166,7 +166,7 @@ function IndividualsList() {
           <h1 className="text-2xl sm:text-3xl font-black">قائمة الأفراد</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {voterFilter === "unknown_age"
-              ? "قائمة الـ check-up: كل اللي ما عندهم سنة ولادة / عمر محدد."
+              ? "قائمة الـ check-up: الأحياء اللي ما عندهم سنة ولادة (المتوفّون مش مطلوب عمرهن)."
               : "كل الأشخاص المسجّلين: رب العائلة، الزوجة، الأم، الأولاد، وجميع الأفراد."}
           </p>
         </div>
@@ -219,7 +219,7 @@ function IndividualsList() {
             onChange={(e) => setFilter(e.target.value as VoterFilter)}
           >
             <option value="">— الكل —</option>
-            <option value="unknown_age">عمر غير محدد</option>
+            <option value="unknown_age">عمر غير محدد (أحياء)</option>
             <option value="deceased">متوفّى</option>
             <option value="expat">مغترب</option>
             <option value="military">عسكري</option>

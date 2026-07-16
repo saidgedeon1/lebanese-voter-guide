@@ -399,26 +399,27 @@ function EditFamilyPage() {
     );
   };
 
+  const familyPayload = () => ({
+    registry_district: family.registry_district.trim(),
+    registry_town: family.registry_town.trim(),
+    sect: family.sect.trim() || null,
+    registry_number: family.registry_number.trim() || null,
+    winter_country: family.winter_country.trim() || null,
+    winter_governorate: family.winter_governorate.trim() || null,
+    winter_district: family.winter_district.trim() || null,
+    winter_town: family.winter_town.trim() || null,
+    winter_street: family.winter_street.trim() || null,
+    winter_phone: family.winter_phone.trim() || null,
+    summer_country: family.summer_country.trim() || null,
+    summer_governorate: family.summer_governorate.trim() || null,
+    summer_district: family.summer_district.trim() || null,
+    summer_town: family.summer_town.trim() || null,
+    summer_street: family.summer_street.trim() || null,
+    summer_phone: family.summer_phone.trim() || null,
+  });
+
   const saveFamily = useMutation({
-    mutationFn: async () =>
-      updateFamilyForm(familyId, {
-        registry_district: family.registry_district.trim(),
-        registry_town: family.registry_town.trim(),
-        sect: family.sect.trim() || null,
-        registry_number: family.registry_number.trim() || null,
-        winter_country: family.winter_country.trim() || null,
-        winter_governorate: family.winter_governorate.trim() || null,
-        winter_district: family.winter_district.trim() || null,
-        winter_town: family.winter_town.trim() || null,
-        winter_street: family.winter_street.trim() || null,
-        winter_phone: family.winter_phone.trim() || null,
-        summer_country: family.summer_country.trim() || null,
-        summer_governorate: family.summer_governorate.trim() || null,
-        summer_district: family.summer_district.trim() || null,
-        summer_town: family.summer_town.trim() || null,
-        summer_street: family.summer_street.trim() || null,
-        summer_phone: family.summer_phone.trim() || null,
-      }),
+    mutationFn: async () => updateFamilyForm(familyId, familyPayload()),
     onSuccess: async () => {
       setMessage("تم حفظ بيانات الاستمارة.");
       await invalidateAll();
@@ -434,24 +435,7 @@ function EditFamilyPage() {
     setSaveAllError(null);
     setMessage(null);
     try {
-      await updateFamilyForm(familyId, {
-        registry_district: family.registry_district.trim(),
-        registry_town: family.registry_town.trim(),
-        sect: family.sect.trim() || null,
-        registry_number: family.registry_number.trim() || null,
-        winter_country: family.winter_country.trim() || null,
-        winter_governorate: family.winter_governorate.trim() || null,
-        winter_district: family.winter_district.trim() || null,
-        winter_town: family.winter_town.trim() || null,
-        winter_street: family.winter_street.trim() || null,
-        winter_phone: family.winter_phone.trim() || null,
-        summer_country: family.summer_country.trim() || null,
-        summer_governorate: family.summer_governorate.trim() || null,
-        summer_district: family.summer_district.trim() || null,
-        summer_town: family.summer_town.trim() || null,
-        summer_street: family.summer_street.trim() || null,
-        summer_phone: family.summer_phone.trim() || null,
-      });
+      await updateFamilyForm(familyId, familyPayload());
       for (const draft of members) {
         if (!draft.id) continue;
         await updateIndividual(
@@ -487,6 +471,7 @@ function EditFamilyPage() {
   const saveMember = useMutation({
     mutationFn: async (draft: IndividualDraft) => {
       if (!draft.id) throw new Error("فرد غير موجود");
+      await updateFamilyForm(familyId, familyPayload());
       return updateIndividual(
         draft.id,
         toPayload({
@@ -497,7 +482,7 @@ function EditFamilyPage() {
       );
     },
     onSuccess: async () => {
-      setMessage("تم حفظ بيانات الفرد.");
+      setMessage("تم حفظ الفرد ورقم السجل.");
       await invalidateAll();
       await refetch();
     },
@@ -515,6 +500,7 @@ function EditFamilyPage() {
 
   const createMember = useMutation({
     mutationFn: async (draft: IndividualDraft) => {
+      await updateFamilyForm(familyId, familyPayload());
       return addIndividualToFamily(
         familyId,
         toPayload({
@@ -604,7 +590,8 @@ function EditFamilyPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">تعديل الاستمارة #{familyId}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {data.family_name} · {data.registry_town} — {data.registry_district} · {members.length} أفراد
+            {data.family_name} · {family.registry_town || "—"} — {family.registry_district || "—"}
+            {family.registry_number ? ` · سجل ${family.registry_number}` : ""} · {members.length} أفراد
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -646,6 +633,45 @@ function EditFamilyPage() {
         </div>
       )}
 
+      <section id="registry" className="card-elev p-5 sm:p-6 space-y-4 scroll-mt-24">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-bold text-lg">بيانات السجل</h2>
+            <p className="text-sm text-muted-foreground mt-1">مشتركة لكل أفراد الاستمارة — عدّل رقم السجل من هون</p>
+          </div>
+          <button className="btn-primary" disabled={saveFamily.isPending} onClick={() => saveFamily.mutate()}>
+            {saveFamily.isPending ? "جاري الحفظ..." : "حفظ السجل"}
+          </button>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Field label="قضاء النفوس">
+            <input
+              className="field"
+              value={family.registry_district}
+              onChange={(e) => setFamily({ ...family, registry_district: e.target.value })}
+            />
+          </Field>
+          <Field label="بلدة النفوس">
+            <input
+              className="field"
+              value={family.registry_town}
+              onChange={(e) => setFamily({ ...family, registry_town: e.target.value })}
+            />
+          </Field>
+          <Field label="المذهب">
+            <input className="field" value={family.sect} onChange={(e) => setFamily({ ...family, sect: e.target.value })} />
+          </Field>
+          <Field label="رقم السجل">
+            <input
+              className="field"
+              value={family.registry_number}
+              onChange={(e) => setFamily({ ...family, registry_number: e.target.value })}
+              placeholder="مثال: 123"
+            />
+          </Field>
+        </div>
+      </section>
+
       <section id="members" className="space-y-4 scroll-mt-24">
         <div className="card-elev p-5 sm:p-6 space-y-4">
           <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -683,6 +709,14 @@ function EditFamilyPage() {
                 إلغاء
               </button>
             </div>
+            <Field label="رقم السجل (للاستمارة كلها)">
+              <input
+                className="field"
+                value={family.registry_number}
+                onChange={(e) => setFamily({ ...family, registry_number: e.target.value })}
+                placeholder="مثال: 123"
+              />
+            </Field>
             <IndividualFields
               ind={newMember}
               household={members}
@@ -753,6 +787,14 @@ function EditFamilyPage() {
                 </button>
               </div>
             </div>
+            <Field label="رقم السجل (للاستمارة كلها)">
+              <input
+                className="field"
+                value={family.registry_number}
+                onChange={(e) => setFamily({ ...family, registry_number: e.target.value })}
+                placeholder="مثال: 123"
+              />
+            </Field>
             <IndividualFields
               ind={member}
               household={members}
@@ -787,37 +829,10 @@ function EditFamilyPage() {
 
       <section className="card-elev p-5 sm:p-7 space-y-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="font-bold text-lg">بيانات السجل والسكن</h2>
+          <h2 className="font-bold text-lg">مكان السكن</h2>
           <button className="btn-primary" disabled={saveFamily.isPending} onClick={() => saveFamily.mutate()}>
-            {saveFamily.isPending ? "جاري الحفظ..." : "حفظ بيانات الاستمارة"}
+            {saveFamily.isPending ? "جاري الحفظ..." : "حفظ السكن"}
           </button>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Field label="قضاء النفوس">
-            <input
-              className="field"
-              value={family.registry_district}
-              onChange={(e) => setFamily({ ...family, registry_district: e.target.value })}
-            />
-          </Field>
-          <Field label="بلدة النفوس">
-            <input
-              className="field"
-              value={family.registry_town}
-              onChange={(e) => setFamily({ ...family, registry_town: e.target.value })}
-            />
-          </Field>
-          <Field label="المذهب">
-            <input className="field" value={family.sect} onChange={(e) => setFamily({ ...family, sect: e.target.value })} />
-          </Field>
-          <Field label="رقم السجل">
-            <input
-              className="field"
-              value={family.registry_number}
-              onChange={(e) => setFamily({ ...family, registry_number: e.target.value })}
-            />
-          </Field>
         </div>
 
         <div>

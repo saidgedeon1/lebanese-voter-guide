@@ -16,6 +16,8 @@ import {
 } from "@/lib/registry";
 import {
   QUICK_ADD_RELATIONS,
+  DEFAULT_REGISTRY_DISTRICT,
+  DEFAULT_REGISTRY_TOWN,
   defaultsForRelation,
   defaultMaritalForRelation,
   patchOnRelationChange,
@@ -267,8 +269,8 @@ function NewFamily() {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<1 | 2>(1);
   const [family, setFamily] = useState({
-    registry_district: "",
-    registry_town: "",
+    registry_district: DEFAULT_REGISTRY_DISTRICT,
+    registry_town: DEFAULT_REGISTRY_TOWN,
     sect: "",
     registry_number: "",
     winter_country: "لبنان",
@@ -316,8 +318,8 @@ function NewFamily() {
       });
       const payload = {
         ...family,
-        registry_district: family.registry_district.trim() || "غير محدد",
-        registry_town: family.registry_town.trim() || "غير محدد",
+        registry_district: family.registry_district.trim() || DEFAULT_REGISTRY_DISTRICT,
+        registry_town: family.registry_town.trim() || DEFAULT_REGISTRY_TOWN,
         sect: family.sect.trim() || null,
         registry_number: family.registry_number.trim() || null,
         winter_country: family.winter_country.trim() || null,

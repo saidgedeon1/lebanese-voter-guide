@@ -1,5 +1,9 @@
 import { normalizeRelation } from "@/lib/registry";
 
+/** Default نفوس location for new forms (Brih / Chouf). */
+export const DEFAULT_REGISTRY_DISTRICT = "الشوف";
+export const DEFAULT_REGISTRY_TOWN = "بريح";
+
 /** Person-shaped fields used while drafting a family form. */
 export type FormPerson = {
   relation: string;

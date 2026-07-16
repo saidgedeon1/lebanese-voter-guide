@@ -23,6 +23,8 @@ import {
 } from "@/lib/registry";
 import {
   QUICK_ADD_RELATIONS,
+  DEFAULT_REGISTRY_DISTRICT,
+  DEFAULT_REGISTRY_TOWN,
   defaultsForRelation,
   defaultMaritalForRelation,
   patchOnRelationChange,
@@ -353,8 +355,8 @@ function EditFamilyPage() {
   useEffect(() => {
     if (!data) return;
     setFamily({
-      registry_district: data.registry_district || "",
-      registry_town: data.registry_town || "",
+      registry_district: data.registry_district || DEFAULT_REGISTRY_DISTRICT,
+      registry_town: data.registry_town || DEFAULT_REGISTRY_TOWN,
       sect: data.sect || "",
       registry_number: data.registry_number || "",
       winter_country: data.winter_country || "لبنان",

@@ -507,6 +507,7 @@ export async function fetchStats() {
     { count: voted },
     { count: deceasedByStatus },
     { count: deceasedByLegacy },
+    { count: unknownAge },
   ] = await Promise.all([
     sb.from("individuals").select("*", { count: "exact", head: true }),
     sb.from("family_forms").select("*", { count: "exact", head: true }),
@@ -523,6 +524,7 @@ export async function fetchStats() {
       .select("*", { count: "exact", head: true })
       .ilike("preferred_candidate", "%متوف%")
       .neq("voter_status", "متوفّى"),
+    sb.from("individuals").select("*", { count: "exact", head: true }).is("birth_year", null),
   ]);
 
   const totalPeople = individuals ?? 0;
@@ -537,6 +539,7 @@ export async function fetchStats() {
     voted: votedCount,
     deceased: deceasedCount,
     living: Math.max(0, totalPeople - deceasedCount),
+    unknown_age: unknownAge ?? 0,
   };
 }
 
@@ -545,7 +548,7 @@ export async function listIndividuals(filters: {
   political?: string;
   town?: string;
   search?: string;
-  voterFilter?: "" | "voted" | "deceased" | "expat" | "military";
+  voterFilter?: "" | "voted" | "deceased" | "expat" | "military" | "unknown_age";
 } = {}) {
   let q = sb
     .from("individuals")
@@ -555,6 +558,7 @@ export async function listIndividuals(filters: {
     .limit(5000);
   if (filters.residence) q = q.ilike("current_residence", `%${filters.residence}%`);
   if (filters.political) q = q.eq("political_leaning", filters.political);
+  if (filters.voterFilter === "unknown_age") q = q.is("birth_year", null);
   const { data, error } = await q;
   if (error) throw error;
 
@@ -586,6 +590,9 @@ export async function listIndividuals(filters: {
     rows = rows.filter((r) => r.voter_status === "مغترب" && !isDeceased(r));
   } else if (filters.voterFilter === "military") {
     rows = rows.filter((r) => r.is_military);
+  } else if (filters.voterFilter === "unknown_age") {
+    // Also catch invalid years that getAge rejects (already null from DB query, keep as safety).
+    rows = rows.filter((r) => getAge(r.birth_year) === null);
   }
 
   if (filters.search?.trim()) {

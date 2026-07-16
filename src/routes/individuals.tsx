@@ -1,6 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PersonFilesPanel } from "@/components/PersonFilesPanel";
 import { PassportPhoto } from "@/components/PassportPhoto";
 import {
@@ -26,7 +26,15 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
+type IndividualsSearch = {
+  filter?: "unknown_age";
+};
+
 export const Route = createFileRoute("/individuals")({
+  validateSearch: (search: Record<string, unknown>): IndividualsSearch => {
+    if (search.filter === "unknown_age") return { filter: "unknown_age" };
+    return {};
+  },
   component: IndividualsList,
 });
 
@@ -35,15 +43,31 @@ type ListedIndividual = Individual & {
   spouse_name?: string | null;
 };
 
+type VoterFilter = "" | "voted" | "deceased" | "expat" | "military" | "unknown_age";
+
 function IndividualsList() {
+  const navigate = useNavigate({ from: "/individuals" });
+  const searchParams = Route.useSearch();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [residence, setResidence] = useState("");
   const [political, setPolitical] = useState("");
   const [town, setTown] = useState("");
-  const [voterFilter, setVoterFilter] = useState<"" | "voted" | "deceased" | "expat" | "military">("");
+  const [voterFilter, setVoterFilter] = useState<VoterFilter>(searchParams.filter ?? "");
   const [viewing, setViewing] = useState<ListedIndividual | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ListedIndividual | null>(null);
+
+  useEffect(() => {
+    if (searchParams.filter === "unknown_age") setVoterFilter("unknown_age");
+  }, [searchParams.filter]);
+
+  const setFilter = (next: VoterFilter) => {
+    setVoterFilter(next);
+    void navigate({
+      search: next === "unknown_age" ? { filter: "unknown_age" } : {},
+      replace: true,
+    });
+  };
 
   const { data: listResult, isLoading, refetch } = useQuery({
     queryKey: ["individuals", search, residence, political, town, voterFilter],
@@ -83,6 +107,7 @@ function IndividualsList() {
       "اسم الأم",
       "الزوج/الزوجة",
       "صلة القرابة",
+      "سنة الولادة",
       "بلدة النفوس",
       "السكن الحالي",
       "الميول",
@@ -93,7 +118,7 @@ function IndividualsList() {
       "عسكري",
     ];
     const rows = data.map((r) => {
-      const eligible = canVote(r.birth_year, r.is_military, r);
+      const rowEligible = canVote(r.birth_year, r.is_military, r);
       return [
         r.family?.registry_number ?? "",
         r.first_name,
@@ -102,10 +127,11 @@ function IndividualsList() {
         r.mother_name ?? "",
         r.spouse_name ?? "",
         r.relation,
+        r.birth_year?.toString() ?? "",
         r.family?.registry_town ?? "",
         r.current_residence ?? "",
         r.political_leaning ?? "",
-        eligible === null ? "غير محدد" : eligible ? "نعم" : "لا",
+        rowEligible === null ? "غير محدد" : rowEligible ? "نعم" : "لا",
         r.has_voted ? "نعم" : "لا",
         isDeceased(r) ? "نعم" : "لا",
         r.mobile ?? "",
@@ -120,7 +146,10 @@ function IndividualsList() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "individuals.csv";
+    a.download =
+      voterFilter === "unknown_age"
+        ? `افراد-بدون-عمر-${new Date().toISOString().slice(0, 10)}.csv`
+        : `افراد-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
   };
 
@@ -136,11 +165,16 @@ function IndividualsList() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black">قائمة الأفراد</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            كل الأشخاص المسجّلين: رب العائلة، الزوجة، الأم، الأولاد، وجميع الأفراد.
+            {voterFilter === "unknown_age"
+              ? "قائمة الـ check-up: كل اللي ما عندهم سنة ولادة / عمر محدد."
+              : "كل الأشخاص المسجّلين: رب العائلة، الزوجة، الأم، الأولاد، وجميع الأفراد."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           <span className="chip">المعروض: {(data?.length ?? 0).toLocaleString("ar-EG")}</span>
+          {voterFilter === "unknown_age" ? (
+            <span className="chip !bg-primary/15 !text-primary">بدون عمر محدد</span>
+          ) : null}
           {truncated ? (
             <span className="chip !bg-destructive/15 !text-destructive">عرض أول ٥٠٠٠ فرد فقط</span>
           ) : null}
@@ -178,13 +212,14 @@ function IndividualsList() {
           <input className="field" value={town} onChange={(e) => setTown(e.target.value)} placeholder="بحث جزئي..." />
         </div>
         <div>
-          <label className="label-ar">حالة الناخب</label>
+          <label className="label-ar">حالة الناخب / check-up</label>
           <select
             className="field"
             value={voterFilter}
-            onChange={(e) => setVoterFilter(e.target.value as typeof voterFilter)}
+            onChange={(e) => setFilter(e.target.value as VoterFilter)}
           >
             <option value="">— الكل —</option>
+            <option value="unknown_age">عمر غير محدد</option>
             <option value="deceased">متوفّى</option>
             <option value="expat">مغترب</option>
             <option value="military">عسكري</option>

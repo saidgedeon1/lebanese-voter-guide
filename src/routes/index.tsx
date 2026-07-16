@@ -246,13 +246,38 @@ function Dashboard() {
       {error ? (
         <div className="card-elev p-6 text-destructive">تعذّر تحميل الإحصائيات.</div>
       ) : (
-        <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard label="إجمالي الأفراد" value={isLoading ? 0 : data!.individuals} icon="🗳️" tone="oklch(0.55 0.14 155)" />
           <StatCard label="العايشون" value={isLoading ? 0 : data!.living} icon="💚" tone="oklch(0.58 0.12 145)" />
           <StatCard label="المتوفون" value={isLoading ? 0 : data!.deceased} icon="🕯️" tone="oklch(0.45 0.02 260)" />
           <StatCard label="منتمون لحزب" value={isLoading ? 0 : data!.supporters} icon="🤝" tone="oklch(0.72 0.14 65)" />
           <StatCard label="العسكريون المستثنون" value={isLoading ? 0 : data!.military} icon="⚠️" tone="oklch(0.55 0.22 25)" />
           <StatCard label="إجمالي العائلات" value={isLoading ? 0 : data!.families} icon="🏠" tone="oklch(0.5 0.09 158)" />
+          <Link
+            to="/individuals"
+            search={{ filter: "unknown_age" }}
+            className="card-elev p-5 sm:p-6 relative overflow-hidden col-span-2 hover:shadow-lg transition"
+          >
+            <div
+              className="absolute inset-0 opacity-[0.08] pointer-events-none"
+              style={{ background: "radial-gradient(circle at 100% 0%, oklch(0.65 0.16 55), transparent 60%)" }}
+            />
+            <div className="relative flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm text-muted-foreground font-medium">عمر غير محدد — للـ check-up</div>
+                <div className="mt-2 text-3xl sm:text-4xl font-black tracking-tight">
+                  {(isLoading ? 0 : data!.unknown_age).toLocaleString("ar-EG")}
+                </div>
+                <div className="mt-2 text-sm text-primary font-semibold">افتح القائمة ←</div>
+              </div>
+              <div
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl"
+                style={{ background: "color-mix(in oklab, oklch(0.65 0.16 55) 18%, transparent)" }}
+              >
+                🔎
+              </div>
+            </div>
+          </Link>
         </section>
       )}
 
@@ -267,7 +292,7 @@ function Dashboard() {
           <h3 className="font-bold text-lg">استيراد Excel</h3>
           <p className="text-sm text-muted-foreground mt-1">ارفع ملف إكسل لاستيراد عائلات وأفراد دفعة واحدة.</p>
         </Link>
-        <Link to="/individuals" className="card-elev p-6 hover:shadow-lg transition">
+        <Link to="/individuals" search={{}} className="card-elev p-6 hover:shadow-lg transition">
           <div className="text-3xl mb-2">📋</div>
           <h3 className="font-bold text-lg">قائمة الأفراد</h3>
           <p className="text-sm text-muted-foreground mt-1">فرز حسب السكن، الميول السياسية، وبلدة النفوس.</p>

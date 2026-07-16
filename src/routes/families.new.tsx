@@ -346,7 +346,7 @@ function NewFamily() {
         queryClient.invalidateQueries({ queryKey: ["search"] }),
         queryClient.invalidateQueries({ queryKey: ["family-members"] }),
       ]);
-      navigate({ to: "/individuals" });
+      navigate({ to: "/individuals", search: {} });
     },
   });
 

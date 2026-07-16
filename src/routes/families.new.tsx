@@ -69,7 +69,7 @@ function createIndividual(
     marital_status: relDefaults.marital_status || defaultMaritalForRelation(relation),
     lives_with_family: true,
     is_military: false,
-    political_leaning: "غير مهتم",
+    political_leaning: "مستقل",
     preferred_candidate: "",
     voter_status: "مقيم",
     has_voted: false,
@@ -199,7 +199,7 @@ function IndividualFields({
           />
         </Field>
       </div>
-      <Field label="الميول السياسية">
+      <Field label="الحزب / الميول السياسية">
         <select
           className="field"
           value={ind.political_leaning}

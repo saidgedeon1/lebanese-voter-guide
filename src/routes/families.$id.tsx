@@ -88,7 +88,7 @@ function fromIndividual(member: Individual): IndividualDraft {
     marital_status: member.marital_status || "أعزب",
     lives_with_family: member.lives_with_family ?? true,
     is_military: member.is_military ?? false,
-    political_leaning: member.political_leaning || "غير مهتم",
+    political_leaning: member.political_leaning || "مستقل",
     preferred_candidate: member.preferred_candidate || "",
     voter_status: isDeceased(member) ? "متوفّى" : member.voter_status || "مقيم",
     has_voted: member.has_voted ?? false,
@@ -140,7 +140,7 @@ function emptyDraft(
     marital_status: relDefaults.marital_status || defaultMaritalForRelation(relation),
     lives_with_family: true,
     is_military: false,
-    political_leaning: "غير مهتم",
+    political_leaning: "مستقل",
     preferred_candidate: "",
     voter_status: "مقيم",
     has_voted: false,
@@ -283,7 +283,7 @@ function IndividualFields({
           />
         </Field>
       </div>
-      <Field label="الميول السياسية">
+      <Field label="الحزب / الميول السياسية">
         <select className="field" value={ind.political_leaning} onChange={(e) => onChange({ political_leaning: e.target.value })}>
           {POLITICAL_OPTIONS.map((r) => (
             <option key={r} value={r}>

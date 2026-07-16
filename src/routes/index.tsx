@@ -122,7 +122,7 @@ function FamilyDetails({
         <span className="chip">21-39: {family.age_21_39}</span>
         <span className="chip">40-59: {family.age_40_59}</span>
         <span className="chip">+60: {family.age_60_plus}</span>
-        <span className="chip">المؤيدون: {family.supporter_count}</span>
+        <span className="chip">منتمون لحزب: {family.supporter_count}</span>
         <span className="chip">العسكريون: {family.military_count}</span>
       </div>
 
@@ -250,7 +250,7 @@ function Dashboard() {
           <StatCard label="إجمالي الأفراد" value={isLoading ? 0 : data!.individuals} icon="🗳️" tone="oklch(0.55 0.14 155)" />
           <StatCard label="العايشون" value={isLoading ? 0 : data!.living} icon="💚" tone="oklch(0.58 0.12 145)" />
           <StatCard label="المتوفون" value={isLoading ? 0 : data!.deceased} icon="🕯️" tone="oklch(0.45 0.02 260)" />
-          <StatCard label="إجمالي المؤيدين" value={isLoading ? 0 : data!.supporters} icon="🤝" tone="oklch(0.72 0.14 65)" />
+          <StatCard label="منتمون لحزب" value={isLoading ? 0 : data!.supporters} icon="🤝" tone="oklch(0.72 0.14 65)" />
           <StatCard label="العسكريون المستثنون" value={isLoading ? 0 : data!.military} icon="⚠️" tone="oklch(0.55 0.22 25)" />
           <StatCard label="إجمالي العائلات" value={isLoading ? 0 : data!.families} icon="🏠" tone="oklch(0.5 0.09 158)" />
         </section>
@@ -332,7 +332,7 @@ function Dashboard() {
               />
             </div>
             <div>
-              <label className="label-ar">وجود ميول سياسية</label>
+              <label className="label-ar">الحزب / الميول</label>
               <select className="field" value={political} onChange={(e) => setPolitical(e.target.value)}>
                 <option value="">— الكل —</option>
                 {POLITICAL_OPTIONS.map((option) => (

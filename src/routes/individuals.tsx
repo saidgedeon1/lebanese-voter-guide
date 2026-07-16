@@ -165,7 +165,7 @@ function IndividualsList() {
           <input className="field" value={residence} onChange={(e) => setResidence(e.target.value)} placeholder="بحث جزئي..." />
         </div>
         <div>
-          <label className="label-ar">الميول السياسية</label>
+          <label className="label-ar">الحزب / الميول</label>
           <select className="field" value={political} onChange={(e) => setPolitical(e.target.value)}>
             <option value="">— الكل —</option>
             {POLITICAL_OPTIONS.map((o) => (
@@ -247,17 +247,7 @@ function IndividualsList() {
                     <td className="p-3">{r.family?.registry_town || "—"}</td>
                     <td className="p-3 text-muted-foreground">{r.current_residence || "—"}</td>
                     <td className="p-3">
-                      <span
-                        className={`chip ${
-                          r.political_leaning === "مؤيد"
-                            ? "!bg-success !text-success-foreground"
-                            : r.political_leaning === "معارض"
-                              ? "!bg-destructive !text-destructive-foreground"
-                              : ""
-                        }`}
-                      >
-                        {r.political_leaning || "—"}
-                      </span>
+                      <span className="chip">{r.political_leaning || "—"}</span>
                     </td>
                     <td className="p-3">
                       {r.is_military ? (

@@ -76,7 +76,54 @@ export const RELATION_OPTIONS = [
   "صهر",
 ] as const;
 export const MARITAL_OPTIONS = ["متزوج", "أعزب", "مطلق", "أرمل"] as const;
-export const POLITICAL_OPTIONS = ["مؤيد", "معارض", "رمادي", "غير مهتم"] as const;
+export const POLITICAL_OPTIONS = [
+  "مستقل",
+  "غير مهتم",
+  "رمادي",
+  "القوات اللبنانية",
+  "التيار الوطني الحر",
+  "حزب الله",
+  "حركة أمل",
+  "الحزب التقدمي الاشتراكي",
+  "تيار المستقبل",
+  "حزب الكتائب اللبنانية",
+  "تيار المردة",
+  "الحزب السوري القومي الاجتماعي",
+  "حزب الطاشناق",
+  "حزب الهنشاق",
+  "حزب الوطنيين الأحرار",
+  "الجماعة الإسلامية",
+  "جمعية المشاريع الخيرية الإسلامية",
+  "التنظيم الشعبي الناصري",
+  "حزب البعث العربي الاشتراكي",
+  "تيار الكرامة",
+  "حركة الاستقلال",
+  "حزب الاتحاد",
+  "الحزب الديمقراطي اللبناني",
+  "تيار العزم",
+  "حزب الحوار الوطني",
+  "الاتحاد السرياني",
+  "حزب النجادة",
+  "مواطنون ومواطنات في دولة",
+  "قوى التغيير",
+  "مؤيد",
+  "معارض",
+] as const;
+
+/** Values that are not a party affiliation (for stats / filters). */
+export const NON_PARTY_LEANINGS = new Set([
+  "مستقل",
+  "غير مهتم",
+  "رمادي",
+  "مؤيد",
+  "معارض",
+  "",
+]);
+
+export function isPartyAffiliation(value: string | null | undefined) {
+  const v = (value ?? "").trim();
+  return Boolean(v) && !NON_PARTY_LEANINGS.has(v);
+}
 export const VOTER_STATUS_OPTIONS = ["مقيم", "مغترب", "متوفّى"] as const;
 
 /** Deceased = وضع الناخب متوفّى, or legacy marker in الصوت التفضيلي. */
@@ -439,7 +486,7 @@ function toFamilySummary(family: FamilyForm & { individuals?: Individual[] | nul
       .length,
     male_count: members.filter((member) => inferGender(member.relation) === "male").length,
     female_count: members.filter((member) => inferGender(member.relation) === "female").length,
-    supporter_count: members.filter((member) => member.political_leaning === "مؤيد").length,
+    supporter_count: members.filter((member) => isPartyAffiliation(member.political_leaning)).length,
     military_count: members.filter((member) => member.is_military).length,
     age_average: ages.length ? Math.round(ages.reduce((sum, age) => sum + age, 0) / ages.length) : null,
     age_min: ages.length ? Math.min(...ages) : null,
@@ -463,7 +510,11 @@ export async function fetchStats() {
   ] = await Promise.all([
     sb.from("individuals").select("*", { count: "exact", head: true }),
     sb.from("family_forms").select("*", { count: "exact", head: true }),
-    sb.from("individuals").select("*", { count: "exact", head: true }).eq("political_leaning", "مؤيد"),
+    sb
+      .from("individuals")
+      .select("*", { count: "exact", head: true })
+      .not("political_leaning", "is", null)
+      .not("political_leaning", "in", "(مستقل,غير مهتم,رمادي,مؤيد,معارض)"),
     sb.from("individuals").select("*", { count: "exact", head: true }).eq("is_military", true),
     sb.from("individuals").select("*", { count: "exact", head: true }).eq("has_voted", true),
     sb.from("individuals").select("*", { count: "exact", head: true }).eq("voter_status", "متوفّى"),

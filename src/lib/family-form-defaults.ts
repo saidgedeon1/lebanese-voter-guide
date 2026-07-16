@@ -4,6 +4,27 @@ import { normalizeRelation } from "@/lib/registry";
 export const DEFAULT_REGISTRY_DISTRICT = "الشوف";
 export const DEFAULT_REGISTRY_TOWN = "بريح";
 
+const WINTER_TO_SUMMER = {
+  winter_country: "summer_country",
+  winter_governorate: "summer_governorate",
+  winter_district: "summer_district",
+  winter_town: "summer_town",
+  winter_street: "summer_street",
+  winter_phone: "summer_phone",
+} as const;
+
+type WinterField = keyof typeof WINTER_TO_SUMMER;
+
+/** When winter housing is filled, mirror the same value into summer. */
+export function patchWinterHousing<T extends Record<WinterField, string>>(
+  family: T,
+  field: WinterField,
+  value: string,
+): T {
+  const summerField = WINTER_TO_SUMMER[field];
+  return { ...family, [field]: value, [summerField]: value };
+}
+
 /** Person-shaped fields used while drafting a family form. */
 export type FormPerson = {
   relation: string;

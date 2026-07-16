@@ -21,6 +21,7 @@ import {
   defaultsForRelation,
   defaultMaritalForRelation,
   patchOnRelationChange,
+  patchWinterHousing,
   relationFieldHint,
   tripleName,
   findHeadPerson,
@@ -464,20 +465,21 @@ function NewFamily() {
           </section>
 
           <section>
-            <h2 className="font-bold text-lg mb-4">مكان السكن شتاءً</h2>
+            <h2 className="font-bold text-lg mb-1">مكان السكن شتاءً</h2>
+            <p className="text-xs text-muted-foreground mb-4">بينكتب تلقائي على سكن الصيف كمان — فيك تعدّل الصيف بعدين إذا مختلف</p>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <Field label="البلد">
                 <input
                   className="field"
                   value={family.winter_country}
-                  onChange={(e) => setFamily({ ...family, winter_country: e.target.value })}
+                  onChange={(e) => setFamily(patchWinterHousing(family, "winter_country", e.target.value))}
                 />
               </Field>
               <Field label="المحافظة">
                 <input
                   className="field"
                   value={family.winter_governorate}
-                  onChange={(e) => setFamily({ ...family, winter_governorate: e.target.value })}
+                  onChange={(e) => setFamily(patchWinterHousing(family, "winter_governorate", e.target.value))}
                   placeholder="جبل لبنان"
                 />
               </Field>
@@ -485,7 +487,7 @@ function NewFamily() {
                 <input
                   className="field"
                   value={family.winter_district}
-                  onChange={(e) => setFamily({ ...family, winter_district: e.target.value })}
+                  onChange={(e) => setFamily(patchWinterHousing(family, "winter_district", e.target.value))}
                   placeholder="كسروان"
                 />
               </Field>
@@ -493,7 +495,7 @@ function NewFamily() {
                 <input
                   className="field"
                   value={family.winter_town}
-                  onChange={(e) => setFamily({ ...family, winter_town: e.target.value })}
+                  onChange={(e) => setFamily(patchWinterHousing(family, "winter_town", e.target.value))}
                   placeholder="الصفرا"
                 />
               </Field>
@@ -501,14 +503,14 @@ function NewFamily() {
                 <input
                   className="field"
                   value={family.winter_street}
-                  onChange={(e) => setFamily({ ...family, winter_street: e.target.value })}
+                  onChange={(e) => setFamily(patchWinterHousing(family, "winter_street", e.target.value))}
                 />
               </Field>
               <Field label="الهاتف الثابت">
                 <input
                   className="field"
                   value={family.winter_phone}
-                  onChange={(e) => setFamily({ ...family, winter_phone: e.target.value })}
+                  onChange={(e) => setFamily(patchWinterHousing(family, "winter_phone", e.target.value))}
                 />
               </Field>
             </div>

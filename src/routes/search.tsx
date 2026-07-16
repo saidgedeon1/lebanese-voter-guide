@@ -7,6 +7,7 @@ import {
   canVote,
   displayMaritalStatus,
   findSpouse,
+  getAge,
   getFamilyMembers,
   inferGender,
   isDeceased,
@@ -14,13 +15,18 @@ import {
   normalizeArabic,
   normalizeRelation,
   searchByName,
-  type Individual,
   type FamilyForm,
+  type FamilySummary,
+  type Individual,
 } from "@/lib/registry";
 
 export const Route = createFileRoute("/search")({
   component: SearchPage,
 });
+
+type VoterListMode = "eligible" | "eligible_male" | "eligible_female";
+
+type ListedVoter = Individual & { family: FamilyForm };
 
 function personLabel(person: Pick<Individual, "first_name" | "last_name" | "father_name">) {
   return [person.first_name, person.father_name, person.last_name].filter(Boolean).join(" ").trim();
@@ -32,9 +38,53 @@ function looksLikeRegistryNumber(value: string) {
   return /^[\d٠-٩]+([\/\-]?[\d٠-٩]+)?$/.test(t);
 }
 
+function collectEligibleVoters(
+  families: FamilySummary[],
+  mode: VoterListMode,
+  familyId?: number | null,
+): ListedVoter[] {
+  const people: ListedVoter[] = [];
+  for (const fam of families) {
+    if (familyId != null && fam.id !== familyId) continue;
+    for (const member of fam.members) {
+      if (canVote(member.birth_year, member.is_military, member) !== true) continue;
+      const gender = inferGender(member.relation);
+      if (mode === "eligible_male" && gender !== "male") continue;
+      if (mode === "eligible_female" && gender !== "female") continue;
+      people.push({ ...member, family: fam });
+    }
+  }
+  return people.sort((a, b) => a.first_name.localeCompare(b.first_name, "ar"));
+}
+
+function collectEligibleFromMembers(
+  members: Individual[],
+  family: FamilyForm,
+  mode: VoterListMode,
+): ListedVoter[] {
+  return members
+    .filter((member) => {
+      if (canVote(member.birth_year, member.is_military, member) !== true) return false;
+      const gender = inferGender(member.relation);
+      if (mode === "eligible_male") return gender === "male";
+      if (mode === "eligible_female") return gender === "female";
+      return true;
+    })
+    .map((member) => ({ ...member, family }))
+    .sort((a, b) => a.first_name.localeCompare(b.first_name, "ar"));
+}
+
+function voterListTitle(mode: VoterListMode) {
+  if (mode === "eligible_male") return "الذكور اللي بيقدروا ينتخبوا";
+  if (mode === "eligible_female") return "الإناث اللي بيقدروا ينتخبوا";
+  return "كل اللي بيقدروا ينتخبوا";
+}
+
 function SearchPage() {
   const [q, setQ] = useState("");
-  const [selected, setSelected] = useState<(Individual & { family: FamilyForm }) | null>(null);
+  const [selected, setSelected] = useState<ListedVoter | null>(null);
+  const [voterListMode, setVoterListMode] = useState<VoterListMode | null>(null);
+  const [voterListFamilyId, setVoterListFamilyId] = useState<number | null>(null);
   const registryQuery = q.trim();
   const registryMode = looksLikeRegistryNumber(registryQuery);
 
@@ -88,12 +138,37 @@ function SearchPage() {
     return { eligible, eligibleMale, eligibleFemale };
   }, [family]);
 
+  const openVoterList = (mode: VoterListMode, familyId: number | null = null) => {
+    setVoterListMode(mode);
+    setVoterListFamilyId(familyId);
+  };
+
+  const voterListPeople = useMemo(() => {
+    if (!voterListMode) return [];
+    if (registryFamilies?.length) {
+      return collectEligibleVoters(registryFamilies, voterListMode, voterListFamilyId);
+    }
+    if (
+      selected?.family &&
+      family?.length &&
+      (voterListFamilyId == null || voterListFamilyId === selected.family_form_id)
+    ) {
+      return collectEligibleFromMembers(family, selected.family, voterListMode);
+    }
+    return [];
+  }, [voterListMode, voterListFamilyId, registryFamilies, family, selected]);
+
+  const clearVoterList = () => {
+    setVoterListMode(null);
+    setVoterListFamilyId(null);
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl sm:text-3xl font-black">محرك البحث الذكي</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          ابحث بالاسم، الشهرة، الاسم الثلاثي، أو رقم السجل — بالعربي أو بالإنكليزي.
+          ابحث بالاسم، الشهرة، الاسم الثلاثي، أو رقم السجل — كبسة على أرقام الناخبين بتفتح القائمة.
         </p>
       </div>
 
@@ -107,6 +182,7 @@ function SearchPage() {
             onChange={(e) => {
               setQ(e.target.value);
               setSelected(null);
+              clearVoterList();
             }}
             autoFocus
           />
@@ -121,9 +197,40 @@ function SearchPage() {
               ) : (
                 <>
                   <span className="chip">عائلات: {registryTotals.families.toLocaleString("ar-EG")}</span>
-                  <span className="chip">ينتخب: {registryTotals.eligible.toLocaleString("ar-EG")}</span>
-                  <span className="chip">ذكور ناخبون: {registryTotals.eligibleMale.toLocaleString("ar-EG")}</span>
-                  <span className="chip">إناث ناخبات: {registryTotals.eligibleFemale.toLocaleString("ar-EG")}</span>
+                  <button
+                    type="button"
+                    className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                      voterListMode === "eligible" && voterListFamilyId == null ? "!bg-primary !text-primary-foreground" : ""
+                    }`}
+                    onClick={() => openVoterList("eligible")}
+                    disabled={registryTotals.eligible === 0}
+                  >
+                    ينتخب: {registryTotals.eligible.toLocaleString("ar-EG")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                      voterListMode === "eligible_male" && voterListFamilyId == null
+                        ? "!bg-primary !text-primary-foreground"
+                        : ""
+                    }`}
+                    onClick={() => openVoterList("eligible_male")}
+                    disabled={registryTotals.eligibleMale === 0}
+                  >
+                    ذكور ناخبون: {registryTotals.eligibleMale.toLocaleString("ar-EG")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                      voterListMode === "eligible_female" && voterListFamilyId == null
+                        ? "!bg-primary !text-primary-foreground"
+                        : ""
+                    }`}
+                    onClick={() => openVoterList("eligible_female")}
+                    disabled={registryTotals.eligibleFemale === 0}
+                  >
+                    إناث ناخبات: {registryTotals.eligibleFemale.toLocaleString("ar-EG")}
+                  </button>
                 </>
               )}
             </div>
@@ -141,8 +248,42 @@ function SearchPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 text-sm items-center">
-                      <span className="chip">ذكور ناخبون: {fam.eligible_male_voters}</span>
-                      <span className="chip">إناث ناخبات: {fam.eligible_female_voters}</span>
+                      <button
+                        type="button"
+                        className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                          voterListMode === "eligible" && voterListFamilyId === fam.id
+                            ? "!bg-primary !text-primary-foreground"
+                            : ""
+                        }`}
+                        onClick={() => openVoterList("eligible", fam.id)}
+                        disabled={fam.eligible_voters === 0}
+                      >
+                        ينتخب: {fam.eligible_voters}
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                          voterListMode === "eligible_male" && voterListFamilyId === fam.id
+                            ? "!bg-primary !text-primary-foreground"
+                            : ""
+                        }`}
+                        onClick={() => openVoterList("eligible_male", fam.id)}
+                        disabled={fam.eligible_male_voters === 0}
+                      >
+                        ذكور ناخبون: {fam.eligible_male_voters}
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                          voterListMode === "eligible_female" && voterListFamilyId === fam.id
+                            ? "!bg-primary !text-primary-foreground"
+                            : ""
+                        }`}
+                        onClick={() => openVoterList("eligible_female", fam.id)}
+                        disabled={fam.eligible_female_voters === 0}
+                      >
+                        إناث ناخبات: {fam.eligible_female_voters}
+                      </button>
                       <Link to="/families/$id" params={{ id: String(fam.id) }} search={{}} className="btn-ghost">
                         تعديل
                       </Link>
@@ -152,6 +293,7 @@ function SearchPage() {
                         onClick={() => {
                           const first = fam.members[0];
                           if (!first) return;
+                          clearVoterList();
                           setSelected({ ...first, family: fam });
                         }}
                       >
@@ -164,6 +306,60 @@ function SearchPage() {
             )}
             {!registryFamiliesLoading && registryFamilies?.length === 0 && (
               <div className="text-sm text-muted-foreground p-2">ما في عائلات بهالرقم.</div>
+            )}
+          </div>
+        )}
+
+        {voterListMode && (
+          <div className="mt-4 rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="font-bold text-lg">{voterListTitle(voterListMode)}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {voterListPeople.length.toLocaleString("ar-EG")} شخص — كبسة على الاسم لفتح الملف
+                </p>
+              </div>
+              <button type="button" className="btn-ghost" onClick={clearVoterList}>
+                إغلاق القائمة
+              </button>
+            </div>
+            {voterListPeople.length === 0 ? (
+              <div className="text-sm text-muted-foreground">ما في أشخاص بهالتصنيف.</div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {voterListPeople.map((person) => {
+                  const age = getAge(person.birth_year);
+                  return (
+                    <button
+                      key={`${person.family_form_id}-${person.id}`}
+                      type="button"
+                      onClick={() => {
+                        setSelected(person);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className={`w-full text-right p-3 rounded-lg border transition ${
+                        selected?.id === person.id
+                          ? "border-primary bg-card"
+                          : "border-border bg-card hover:bg-muted"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="font-semibold">
+                            {personLabel(person)}
+                            <span className="chip mr-2">{normalizeRelation(person.relation) || person.relation}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            سجل {person.family?.registry_number || "—"} · استمارة #{person.family_form_id}
+                            {age != null ? ` · عمر ${age}` : ""}
+                          </div>
+                        </div>
+                        <span className="text-xs text-primary font-semibold">عرض الملف ←</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
@@ -183,7 +379,10 @@ function SearchPage() {
             {results?.map((r) => (
               <button
                 key={r.id}
-                onClick={() => setSelected(r)}
+                onClick={() => {
+                  clearVoterList();
+                  setSelected(r);
+                }}
                 className={`w-full text-right p-3 rounded-lg border transition ${
                   selected?.id === r.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted"
                 }`}
@@ -348,9 +547,42 @@ function SearchPage() {
             <h2 className="font-bold text-xl mb-2">شجرة العائلة</h2>
             {familyVoteCounts && (
               <div className="mb-4 flex flex-wrap gap-2">
-                <span className="chip">ينتخب: {familyVoteCounts.eligible}</span>
-                <span className="chip">ذكور ناخبون: {familyVoteCounts.eligibleMale}</span>
-                <span className="chip">إناث ناخبات: {familyVoteCounts.eligibleFemale}</span>
+                <button
+                  type="button"
+                  className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                    voterListMode === "eligible" && voterListFamilyId === selected.family_form_id
+                      ? "!bg-primary !text-primary-foreground"
+                      : ""
+                  }`}
+                  onClick={() => openVoterList("eligible", selected.family_form_id)}
+                  disabled={familyVoteCounts.eligible === 0}
+                >
+                  ينتخب: {familyVoteCounts.eligible}
+                </button>
+                <button
+                  type="button"
+                  className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                    voterListMode === "eligible_male" && voterListFamilyId === selected.family_form_id
+                      ? "!bg-primary !text-primary-foreground"
+                      : ""
+                  }`}
+                  onClick={() => openVoterList("eligible_male", selected.family_form_id)}
+                  disabled={familyVoteCounts.eligibleMale === 0}
+                >
+                  ذكور ناخبون: {familyVoteCounts.eligibleMale}
+                </button>
+                <button
+                  type="button"
+                  className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition ${
+                    voterListMode === "eligible_female" && voterListFamilyId === selected.family_form_id
+                      ? "!bg-primary !text-primary-foreground"
+                      : ""
+                  }`}
+                  onClick={() => openVoterList("eligible_female", selected.family_form_id)}
+                  disabled={familyVoteCounts.eligibleFemale === 0}
+                >
+                  إناث ناخبات: {familyVoteCounts.eligibleFemale}
+                </button>
               </div>
             )}
             {!family && <div className="text-sm text-muted-foreground">جاري التحميل...</div>}

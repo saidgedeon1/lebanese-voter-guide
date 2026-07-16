@@ -2,8 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
 import {
+  canVote,
   deleteFamilyForm,
   fetchStats,
+  getAge,
   listFamilySummaries,
   POLITICAL_OPTIONS,
   type FamilySummary,
@@ -103,19 +105,23 @@ function FamilyDetails({
         onConfirm={() => deleteMutation.mutate()}
       />
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <FamilyMetric label="بيقدر ينتخب" value={family.eligible_voters} />
+        <FamilyMetric label="ما بيقدر ينتخب" value={family.ineligible_voters} />
+        <FamilyMetric label="غير محدد" value={family.unknown_voters} />
         <FamilyMetric label="أعمار العائلة" value={formatAgeSummary(family)} />
-        <FamilyMetric label="0-20 سنة" value={family.age_0_20} />
-        <FamilyMetric label="21-39 سنة" value={family.age_21_39} />
-        <FamilyMetric label="40-59 سنة" value={family.age_40_59} />
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        <span className="chip">رقم السجل: {family.registry_number || "—"}</span>
+        <span className="chip">قيد العائلة: {family.registry_town}</span>
+        <span className="chip">القضاء: {family.registry_district}</span>
+        <span className="chip">0-20: {family.age_0_20}</span>
+        <span className="chip">21-39: {family.age_21_39}</span>
+        <span className="chip">40-59: {family.age_40_59}</span>
         <span className="chip">+60: {family.age_60_plus}</span>
         <span className="chip">المؤيدون: {family.supporter_count}</span>
         <span className="chip">العسكريون: {family.military_count}</span>
-        <span className="chip">قيد العائلة: {family.registry_town}</span>
-        <span className="chip">القضاء: {family.registry_district}</span>
       </div>
 
       <div className="mt-4 overflow-x-auto">
@@ -125,6 +131,7 @@ function FamilyDetails({
               <th className="p-3 font-semibold">الاسم</th>
               <th className="p-3 font-semibold">القرابة</th>
               <th className="p-3 font-semibold">العمر</th>
+              <th className="p-3 font-semibold">الانتخاب</th>
               <th className="p-3 font-semibold">الميول</th>
               <th className="p-3 font-semibold">السكن</th>
               <th className="p-3 font-semibold">إجراء</th>
@@ -132,7 +139,11 @@ function FamilyDetails({
           </thead>
           <tbody>
             {family.members.map((member) => {
-              const age = member.birth_year ? new Date().getFullYear() - member.birth_year : null;
+              const age = getAge(member.birth_year);
+              const vote = canVote(member.birth_year, member.is_military, member);
+              const voteLabel = vote === true ? "نعم" : vote === false ? "لا" : "غير محدد";
+              const voteClass =
+                vote === true ? "text-success font-semibold" : vote === false ? "text-destructive font-semibold" : "text-muted-foreground";
 
               return (
                 <tr key={member.id} className="border-t border-border">
@@ -141,10 +152,16 @@ function FamilyDetails({
                   </td>
                   <td className="p-3">{member.relation}</td>
                   <td className="p-3">{age ?? "—"}</td>
+                  <td className={`p-3 ${voteClass}`}>{voteLabel}</td>
                   <td className="p-3">{member.political_leaning || "—"}</td>
                   <td className="p-3 text-muted-foreground">{member.current_residence || "—"}</td>
                   <td className="p-3">
-                    <Link to="/families/$id" params={{ id: String(family.id) }} search={{}} className="text-primary font-semibold hover:underline">
+                    <Link
+                      to="/families/$id"
+                      params={{ id: String(family.id) }}
+                      search={{ member: member.id }}
+                      className="text-primary font-semibold hover:underline"
+                    >
                       تعديل
                     </Link>
                   </td>
@@ -163,6 +180,7 @@ function FamilyDetails({
 
 function Dashboard() {
   const [search, setSearch] = useState("");
+  const [registryNumber, setRegistryNumber] = useState("");
   const [district, setDistrict] = useState("");
   const [town, setTown] = useState("");
   const [political, setPolitical] = useState("");
@@ -174,8 +192,9 @@ function Dashboard() {
     isLoading: isLoadingFamilies,
     error: familiesError,
   } = useQuery({
-    queryKey: ["family-summaries", search, district, town, political],
-    queryFn: () => listFamilySummaries({ search, district, town, political }),
+    queryKey: ["family-summaries", search, registryNumber, district, town, political],
+    queryFn: () =>
+      listFamilySummaries({ search, registryNumber, district, town, political }),
   });
   const families = familyResult?.families;
   const familiesTruncated = familyResult?.truncated;
@@ -185,6 +204,8 @@ function Dashboard() {
     return {
       members: rows.reduce((sum, family) => sum + family.member_count, 0),
       voters: rows.reduce((sum, family) => sum + family.eligible_voters, 0),
+      ineligible: rows.reduce((sum, family) => sum + family.ineligible_voters, 0),
+      unknown: rows.reduce((sum, family) => sum + family.unknown_voters, 0),
       male: rows.reduce((sum, family) => sum + family.male_count, 0),
       female: rows.reduce((sum, family) => sum + family.female_count, 0),
     };
@@ -260,7 +281,7 @@ function Dashboard() {
             <div>
               <h2 className="text-2xl font-black">شبكة العائلات</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                اعرض كل عائلة مع عدد الناخبين، الذكور، الإناث، والأعمار مع إمكانية التصفية والفتح التفصيلي.
+                اكتب رقم السجل لتشوف كل العائلات اللي عنده — مع مين بيقدر ينتخب ومين لأ.
               </p>
             </div>
             <Link to="/families/new" className="btn-ghost">
@@ -268,14 +289,24 @@ function Dashboard() {
             </Link>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div>
+              <label className="label-ar">رقم السجل</label>
+              <input
+                className="field"
+                value={registryNumber}
+                onChange={(e) => setRegistryNumber(e.target.value)}
+                placeholder="مثال: 123"
+                inputMode="numeric"
+              />
+            </div>
             <div>
               <label className="label-ar">بحث شامل</label>
               <input
                 className="field"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="اسم عائلة، شخص، هاتف، بلدة..."
+                placeholder="اسم، هاتف، بلدة، رقم سجل..."
               />
             </div>
             <div>
@@ -311,11 +342,18 @@ function Dashboard() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="chip">العائلات: {(families?.length ?? 0).toLocaleString("ar-EG")}</span>
+            {registryNumber.trim() ? (
+              <span className="chip !bg-primary/15 !text-primary">سجل {registryNumber.trim()}</span>
+            ) : null}
             {familiesTruncated ? (
               <span className="chip !bg-destructive/15 !text-destructive">عرض أول ٥٠٠ عائلة فقط</span>
             ) : null}
             <span className="chip">الأفراد: {totals.members.toLocaleString("ar-EG")}</span>
-            <span className="chip">الناخبون: {totals.voters.toLocaleString("ar-EG")}</span>
+            <span className="chip">بيقدر ينتخب: {totals.voters.toLocaleString("ar-EG")}</span>
+            <span className="chip">ما بيقدر: {totals.ineligible.toLocaleString("ar-EG")}</span>
+            {totals.unknown > 0 ? (
+              <span className="chip">غير محدد: {totals.unknown.toLocaleString("ar-EG")}</span>
+            ) : null}
             <span className="chip">الذكور: {totals.male.toLocaleString("ar-EG")}</span>
             <span className="chip">الإناث: {totals.female.toLocaleString("ar-EG")}</span>
           </div>
@@ -329,19 +367,20 @@ function Dashboard() {
               <thead className="bg-muted/60 text-muted-foreground">
                 <tr className="text-right">
                   <th className="p-3 font-semibold">العائلة</th>
+                  <th className="p-3 font-semibold">رقم السجل</th>
                   <th className="p-3 font-semibold">بلدة النفوس</th>
                   <th className="p-3 font-semibold">الأفراد</th>
-                  <th className="p-3 font-semibold">الناخبون</th>
+                  <th className="p-3 font-semibold">ينتخب</th>
+                  <th className="p-3 font-semibold">لا ينتخب</th>
                   <th className="p-3 font-semibold">الذكور</th>
                   <th className="p-3 font-semibold">الإناث</th>
-                  <th className="p-3 font-semibold">الأعمار</th>
                   <th className="p-3 font-semibold">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoadingFamilies && (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={9} className="p-6 text-center text-muted-foreground">
                       جاري تحميل العائلات...
                     </td>
                   </tr>
@@ -349,8 +388,10 @@ function Dashboard() {
 
                 {!isLoadingFamilies && families?.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center text-muted-foreground">
-                      لا توجد عائلات مطابقة للفلاتر الحالية.
+                    <td colSpan={9} className="p-6 text-center text-muted-foreground">
+                      {registryNumber.trim()
+                        ? `ما في عائلات برقم السجل ${registryNumber.trim()}.`
+                        : "لا توجد عائلات مطابقة للفلاتر الحالية."}
                     </td>
                   </tr>
                 )}
@@ -366,17 +407,25 @@ function Dashboard() {
                       >
                         <td className="p-3">
                           <div className="font-bold">{family.family_name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            استمارة #{family.id}
-                            {family.registry_number ? ` · قيد ${family.registry_number}` : ""}
-                          </div>
+                          <div className="text-xs text-muted-foreground">استمارة #{family.id}</div>
                         </td>
+                        <td className="p-3 font-semibold">{family.registry_number || "—"}</td>
                         <td className="p-3">{family.registry_town}</td>
                         <td className="p-3 font-semibold">{family.member_count.toLocaleString("ar-EG")}</td>
-                        <td className="p-3 font-semibold text-success">{family.eligible_voters.toLocaleString("ar-EG")}</td>
+                        <td className="p-3 font-semibold text-success">
+                          {family.eligible_voters.toLocaleString("ar-EG")}
+                        </td>
+                        <td className="p-3 font-semibold text-destructive">
+                          {family.ineligible_voters.toLocaleString("ar-EG")}
+                          {family.unknown_voters > 0 ? (
+                            <span className="text-muted-foreground font-normal text-xs">
+                              {" "}
+                              (+{family.unknown_voters} غير محدد)
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="p-3">{family.male_count.toLocaleString("ar-EG")}</td>
                         <td className="p-3">{family.female_count.toLocaleString("ar-EG")}</td>
-                        <td className="p-3">{formatAgeSummary(family)}</td>
                         <td className="p-3">
                           <div className="flex flex-wrap gap-2">
                             <button
@@ -403,7 +452,7 @@ function Dashboard() {
                       </tr>
                       {isExpanded && (
                         <tr className="border-t border-border">
-                          <td colSpan={8} className="p-0">
+                          <td colSpan={9} className="p-0">
                             <FamilyDetails
                               family={family}
                               onDeleted={() => setExpandedFamilyId(null)}

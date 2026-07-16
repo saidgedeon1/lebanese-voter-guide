@@ -47,6 +47,8 @@ export type FamilySummary = FamilyForm & {
   family_name: string;
   member_count: number;
   eligible_voters: number;
+  ineligible_voters: number;
+  unknown_voters: number;
   male_count: number;
   female_count: number;
   supporter_count: number;
@@ -362,11 +364,24 @@ function getCurrentYear() {
   return new Date().getFullYear();
 }
 
-function getAge(birthYear: number | null) {
+export function getAge(birthYear: number | null | undefined) {
   if (!birthYear) return null;
   const age = getCurrentYear() - birthYear;
   if (age < 0 || age > 120) return null;
   return age;
+}
+
+/** true = can vote, false = cannot, null = unknown birth year. */
+export function canVote(
+  birthYear: number | null | undefined,
+  isMilitary: boolean | null | undefined,
+  person?: Pick<Individual, "voter_status" | "preferred_candidate"> | null,
+): boolean | null {
+  if (person && isDeceased(person)) return false;
+  if (isMilitary) return false;
+  const age = getAge(birthYear);
+  if (age === null) return null;
+  return age >= 21;
 }
 
 function inferGender(relation: string) {
@@ -403,11 +418,13 @@ function toFamilySummary(family: FamilyForm & { individuals?: Individual[] | nul
     members,
     family_name: getFamilyName(members, family.registry_town),
     member_count: members.length,
-    eligible_voters: members.filter((member) => {
-      if (isDeceased(member) || member.is_military) return false;
-      const age = getAge(member.birth_year);
-      return age !== null && age >= 21;
-    }).length,
+    eligible_voters: members.filter((member) => canVote(member.birth_year, member.is_military, member) === true)
+      .length,
+    ineligible_voters: members.filter(
+      (member) => canVote(member.birth_year, member.is_military, member) === false,
+    ).length,
+    unknown_voters: members.filter((member) => canVote(member.birth_year, member.is_military, member) === null)
+      .length,
     male_count: members.filter((member) => inferGender(member.relation) === "male").length,
     female_count: members.filter((member) => inferGender(member.relation) === "female").length,
     supporter_count: members.filter((member) => member.political_leaning === "مؤيد").length,
@@ -598,6 +615,9 @@ export async function searchByName(name: string) {
       if (nameFieldsMatch(fields, tokens)) return true;
 
       const needle = normalizeArabic(raw);
+      const registry = normalizeArabic(row.family?.registry_number ?? "");
+      if (registry && (registry === needle || registry.includes(needle))) return true;
+
       const blob = normalizeArabic(
         [row.relation, row.family?.registry_town ?? "", row.family?.registry_number ?? ""].join(" "),
       );
@@ -625,6 +645,7 @@ export async function getFamilyMembers(family_form_id: number) {
 
 export async function listFamilySummaries(filters: {
   search?: string;
+  registryNumber?: string;
   district?: string;
   town?: string;
   political?: string;
@@ -637,6 +658,8 @@ export async function listFamilySummaries(filters: {
 
   if (filters.district) q = q.ilike("registry_district", `%${filters.district}%`);
   if (filters.town) q = q.ilike("registry_town", `%${filters.town}%`);
+  const registryNumber = (filters.registryNumber ?? "").trim();
+  if (registryNumber) q = q.eq("registry_number", registryNumber);
 
   const { data, error } = await q;
   if (error) throw error;

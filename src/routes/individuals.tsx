@@ -4,9 +4,11 @@ import { useState } from "react";
 import { PersonFilesPanel } from "@/components/PersonFilesPanel";
 import { PassportPhoto } from "@/components/PassportPhoto";
 import {
+  canVote,
   deleteIndividual,
   displayMaritalStatus,
   findSpouse,
+  getAge,
   getFamilyMembers,
   isDeceased,
   listIndividuals,
@@ -32,25 +34,6 @@ type ListedIndividual = Individual & {
   family: FamilyForm;
   spouse_name?: string | null;
 };
-
-function getAge(birthYear: number | null | undefined) {
-  if (!birthYear) return null;
-  const age = new Date().getFullYear() - birthYear;
-  if (age < 0 || age > 120) return null;
-  return age;
-}
-
-function canVote(
-  birthYear: number | null | undefined,
-  isMilitary: boolean | null | undefined,
-  person?: Pick<Individual, "voter_status" | "preferred_candidate"> | null,
-) {
-  if (person && isDeceased(person)) return false;
-  if (isMilitary) return false;
-  const age = getAge(birthYear);
-  if (age === null) return null;
-  return age >= 21;
-}
 
 function IndividualsList() {
   const queryClient = useQueryClient();

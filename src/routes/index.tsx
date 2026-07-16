@@ -6,15 +6,89 @@ import {
   deleteFamilyForm,
   fetchStats,
   getAge,
+  inferGender,
   listFamilySummaries,
+  normalizeRelation,
   POLITICAL_OPTIONS,
   type FamilySummary,
+  type Individual,
 } from "@/lib/registry";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
 });
+
+type DashListMode =
+  | "families"
+  | "members"
+  | "eligible"
+  | "eligible_male"
+  | "eligible_female"
+  | "ineligible"
+  | "unknown"
+  | "male"
+  | "female";
+
+type ListedPerson = Individual & {
+  family_name: string;
+  registry_number: string | null;
+  registry_town: string;
+};
+
+function personLabel(person: Pick<Individual, "first_name" | "last_name" | "father_name">) {
+  return [person.first_name, person.father_name, person.last_name].filter(Boolean).join(" ").trim();
+}
+
+function dashListTitle(mode: DashListMode) {
+  switch (mode) {
+    case "families":
+      return "قائمة العائلات";
+    case "members":
+      return "كل الأفراد";
+    case "eligible":
+      return "اللي بيقدروا ينتخبوا";
+    case "eligible_male":
+      return "ذكور ناخبون";
+    case "eligible_female":
+      return "إناث ناخبات";
+    case "ineligible":
+      return "اللي ما بيقدروا ينتخبوا";
+    case "unknown":
+      return "عمر / انتخاب غير محدد";
+    case "male":
+      return "كل الذكور";
+    case "female":
+      return "كل الإناث";
+  }
+}
+
+function collectDashboardPeople(families: FamilySummary[], mode: DashListMode): ListedPerson[] {
+  const people: ListedPerson[] = [];
+  for (const family of families) {
+    for (const member of family.members) {
+      const vote = canVote(member.birth_year, member.is_military, member);
+      const gender = inferGender(member.relation);
+      let keep = false;
+      if (mode === "members") keep = true;
+      else if (mode === "eligible") keep = vote === true;
+      else if (mode === "eligible_male") keep = vote === true && gender === "male";
+      else if (mode === "eligible_female") keep = vote === true && gender === "female";
+      else if (mode === "ineligible") keep = vote === false;
+      else if (mode === "unknown") keep = vote === null;
+      else if (mode === "male") keep = gender === "male";
+      else if (mode === "female") keep = gender === "female";
+      if (!keep) continue;
+      people.push({
+        ...member,
+        family_name: family.family_name,
+        registry_number: family.registry_number,
+        registry_town: family.registry_town,
+      });
+    }
+  }
+  return people.sort((a, b) => a.first_name.localeCompare(b.first_name, "ar"));
+}
 
 function StatCard({ label, value, icon, tone }: { label: string; value: number; icon: string; tone: string }) {
   return (
@@ -41,9 +115,30 @@ function StatCard({ label, value, icon, tone }: { label: string; value: number; 
   );
 }
 
-function FamilyMetric({ label, value }: { label: string; value: string | number }) {
+function FamilyMetric({
+  label,
+  value,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: string | number;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const className = `rounded-xl bg-muted/60 p-3 text-right w-full ${
+    onClick ? "cursor-pointer hover:bg-primary/10 border border-transparent hover:border-primary/30 transition" : ""
+  } ${active ? "!bg-primary/15 border-primary/40 border" : ""}`;
+  if (onClick) {
+    return (
+      <button type="button" className={className} onClick={onClick}>
+        <div className="text-xs font-semibold text-muted-foreground">{label}</div>
+        <div className="mt-1 text-lg font-black">{value}</div>
+      </button>
+    );
+  }
   return (
-    <div className="rounded-xl bg-muted/60 p-3">
+    <div className={className}>
       <div className="text-xs font-semibold text-muted-foreground">{label}</div>
       <div className="mt-1 text-lg font-black">{value}</div>
     </div>
@@ -58,9 +153,13 @@ function formatAgeSummary(family: FamilySummary) {
 function FamilyDetails({
   family,
   onDeleted,
+  onOpenList,
+  activeList,
 }: {
   family: FamilySummary;
   onDeleted?: () => void;
+  onOpenList?: (mode: DashListMode) => void;
+  activeList?: DashListMode | null;
 }) {
   const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -106,11 +205,36 @@ function FamilyDetails({
       />
 
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-        <FamilyMetric label="بيقدر ينتخب" value={family.eligible_voters} />
-        <FamilyMetric label="ذكور ناخبون" value={family.eligible_male_voters} />
-        <FamilyMetric label="إناث ناخبات" value={family.eligible_female_voters} />
-        <FamilyMetric label="ما بيقدر ينتخب" value={family.ineligible_voters} />
-        <FamilyMetric label="غير محدد" value={family.unknown_voters} />
+        <FamilyMetric
+          label="بيقدر ينتخب"
+          value={family.eligible_voters}
+          active={activeList === "eligible"}
+          onClick={onOpenList ? () => onOpenList("eligible") : undefined}
+        />
+        <FamilyMetric
+          label="ذكور ناخبون"
+          value={family.eligible_male_voters}
+          active={activeList === "eligible_male"}
+          onClick={onOpenList ? () => onOpenList("eligible_male") : undefined}
+        />
+        <FamilyMetric
+          label="إناث ناخبات"
+          value={family.eligible_female_voters}
+          active={activeList === "eligible_female"}
+          onClick={onOpenList ? () => onOpenList("eligible_female") : undefined}
+        />
+        <FamilyMetric
+          label="ما بيقدر ينتخب"
+          value={family.ineligible_voters}
+          active={activeList === "ineligible"}
+          onClick={onOpenList ? () => onOpenList("ineligible") : undefined}
+        />
+        <FamilyMetric
+          label="غير محدد"
+          value={family.unknown_voters}
+          active={activeList === "unknown"}
+          onClick={onOpenList ? () => onOpenList("unknown") : undefined}
+        />
         <FamilyMetric label="أعمار العائلة" value={formatAgeSummary(family)} />
       </div>
 
@@ -187,6 +311,8 @@ function Dashboard() {
   const [town, setTown] = useState("");
   const [political, setPolitical] = useState("");
   const [expandedFamilyId, setExpandedFamilyId] = useState<number | null>(null);
+  const [listMode, setListMode] = useState<DashListMode | null>(null);
+  const [listFamilyId, setListFamilyId] = useState<number | null>(null);
 
   const { data, isLoading, error } = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
   const {
@@ -214,6 +340,50 @@ function Dashboard() {
       female: rows.reduce((sum, family) => sum + family.female_count, 0),
     };
   }, [families]);
+
+  const openList = (mode: DashListMode, familyId: number | null = null) => {
+    if (listMode === mode && listFamilyId === familyId) {
+      setListMode(null);
+      setListFamilyId(null);
+      return;
+    }
+    setListMode(mode);
+    setListFamilyId(familyId);
+  };
+
+  const listFamilies = useMemo(() => {
+    if (!families) return [];
+    if (listFamilyId == null) return families;
+    return families.filter((f) => f.id === listFamilyId);
+  }, [families, listFamilyId]);
+
+  const listPeople = useMemo(() => {
+    if (!listMode || listMode === "families") return [];
+    return collectDashboardPeople(listFamilies, listMode);
+  }, [listMode, listFamilies]);
+
+  const ChipBtn = ({
+    mode,
+    label,
+    count,
+    familyId = null,
+  }: {
+    mode: DashListMode;
+    label: string;
+    count: number;
+    familyId?: number | null;
+  }) => (
+    <button
+      type="button"
+      className={`chip cursor-pointer border border-border hover:bg-primary hover:text-primary-foreground transition disabled:opacity-40 disabled:cursor-not-allowed ${
+        listMode === mode && listFamilyId === familyId ? "!bg-primary !text-primary-foreground" : ""
+      }`}
+      onClick={() => openList(mode, familyId)}
+      disabled={count === 0}
+    >
+      {label}: {count.toLocaleString("ar-EG")}
+    </button>
+  );
 
   return (
     <div className="space-y-8">
@@ -370,24 +540,126 @@ function Dashboard() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <span className="chip">العائلات: {(families?.length ?? 0).toLocaleString("ar-EG")}</span>
+            <ChipBtn mode="families" label="العائلات" count={families?.length ?? 0} />
             {registryNumber.trim() ? (
               <span className="chip !bg-primary/15 !text-primary">سجل {registryNumber.trim()}</span>
             ) : null}
             {familiesTruncated ? (
               <span className="chip !bg-destructive/15 !text-destructive">عرض أول ٥٠٠ عائلة فقط</span>
             ) : null}
-            <span className="chip">الأفراد: {totals.members.toLocaleString("ar-EG")}</span>
-            <span className="chip">بيقدر ينتخب: {totals.voters.toLocaleString("ar-EG")}</span>
-            <span className="chip">ذكور ناخبون: {totals.eligibleMale.toLocaleString("ar-EG")}</span>
-            <span className="chip">إناث ناخبات: {totals.eligibleFemale.toLocaleString("ar-EG")}</span>
-            <span className="chip">ما بيقدر: {totals.ineligible.toLocaleString("ar-EG")}</span>
-            {totals.unknown > 0 ? (
-              <span className="chip">غير محدد: {totals.unknown.toLocaleString("ar-EG")}</span>
-            ) : null}
-            <span className="chip">الذكور: {totals.male.toLocaleString("ar-EG")}</span>
-            <span className="chip">الإناث: {totals.female.toLocaleString("ar-EG")}</span>
+            <ChipBtn mode="members" label="الأفراد" count={totals.members} />
+            <ChipBtn mode="eligible" label="بيقدر ينتخب" count={totals.voters} />
+            <ChipBtn mode="eligible_male" label="ذكور ناخبون" count={totals.eligibleMale} />
+            <ChipBtn mode="eligible_female" label="إناث ناخبات" count={totals.eligibleFemale} />
+            <ChipBtn mode="ineligible" label="ما بيقدر" count={totals.ineligible} />
+            {totals.unknown > 0 ? <ChipBtn mode="unknown" label="غير محدد" count={totals.unknown} /> : null}
+            <ChipBtn mode="male" label="الذكور" count={totals.male} />
+            <ChipBtn mode="female" label="الإناث" count={totals.female} />
           </div>
+
+          {listMode && (
+            <div className="mt-4 rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="font-bold text-lg">{dashListTitle(listMode)}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {listMode === "families"
+                      ? `${listFamilies.length.toLocaleString("ar-EG")} عائلة`
+                      : `${listPeople.length.toLocaleString("ar-EG")} شخص`}
+                    {listFamilyId != null ? " · من العيلة المفتوحة" : " · حسب الفلاتر الحالية"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => {
+                    setListMode(null);
+                    setListFamilyId(null);
+                  }}
+                >
+                  إغلاق القائمة
+                </button>
+              </div>
+
+              {listMode === "families" ? (
+                listFamilies.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">ما في عائلات.</div>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {listFamilies.map((family) => (
+                      <div
+                        key={family.id}
+                        className="rounded-lg border border-border bg-card p-3 flex flex-wrap items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold">{family.family_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            استمارة #{family.id} · سجل {family.registry_number || "—"} · {family.registry_town} ·{" "}
+                            {family.member_count} أفراد · ينتخب {family.eligible_voters}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => setExpandedFamilyId(family.id)}
+                          >
+                            عرض
+                          </button>
+                          <Link
+                            to="/families/$id"
+                            params={{ id: String(family.id) }}
+                            search={{}}
+                            className="btn-primary"
+                          >
+                            تعديل
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : listPeople.length === 0 ? (
+                <div className="text-sm text-muted-foreground">ما في أشخاص بهالتصنيف.</div>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {listPeople.map((person) => {
+                    const age = getAge(person.birth_year);
+                    const vote = canVote(person.birth_year, person.is_military, person);
+                    return (
+                      <div
+                        key={`${person.family_form_id}-${person.id}`}
+                        className="rounded-lg border border-border bg-card p-3 flex flex-wrap items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-semibold">
+                            {personLabel(person)}
+                            <span className="chip mr-2">
+                              {normalizeRelation(person.relation) || person.relation}
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {person.family_name} · سجل {person.registry_number || "—"} · {person.registry_town}
+                            {age != null ? ` · عمر ${age}` : ""}
+                            {" · "}
+                            {vote === true ? "ينتخب" : vote === false ? "لا ينتخب" : "غير محدد"}
+                          </div>
+                        </div>
+                        <Link
+                          to="/families/$id"
+                          params={{ id: String(person.family_form_id) }}
+                          search={{ member: person.id }}
+                          className="btn-primary"
+                        >
+                          تعديل
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {familiesError ? (
@@ -491,6 +763,8 @@ function Dashboard() {
                             <FamilyDetails
                               family={family}
                               onDeleted={() => setExpandedFamilyId(null)}
+                              activeList={listFamilyId === family.id ? listMode : null}
+                              onOpenList={(mode) => openList(mode, family.id)}
                             />
                           </td>
                         </tr>

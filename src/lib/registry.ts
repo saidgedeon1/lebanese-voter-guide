@@ -47,6 +47,8 @@ export type FamilySummary = FamilyForm & {
   family_name: string;
   member_count: number;
   eligible_voters: number;
+  eligible_male_voters: number;
+  eligible_female_voters: number;
   ineligible_voters: number;
   unknown_voters: number;
   male_count: number;
@@ -384,7 +386,7 @@ export function canVote(
   return age >= 21;
 }
 
-function inferGender(relation: string) {
+export function inferGender(relation: string) {
   const normalized = normalizeRelation(relation);
   if (FEMALE_RELATIONS.has(normalized)) return "female";
   if (MALE_RELATIONS.has(normalized)) return "male";
@@ -420,6 +422,16 @@ function toFamilySummary(family: FamilyForm & { individuals?: Individual[] | nul
     member_count: members.length,
     eligible_voters: members.filter((member) => canVote(member.birth_year, member.is_military, member) === true)
       .length,
+    eligible_male_voters: members.filter(
+      (member) =>
+        inferGender(member.relation) === "male" &&
+        canVote(member.birth_year, member.is_military, member) === true,
+    ).length,
+    eligible_female_voters: members.filter(
+      (member) =>
+        inferGender(member.relation) === "female" &&
+        canVote(member.birth_year, member.is_military, member) === true,
+    ).length,
     ineligible_voters: members.filter(
       (member) => canVote(member.birth_year, member.is_military, member) === false,
     ).length,

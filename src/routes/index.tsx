@@ -105,8 +105,10 @@ function FamilyDetails({
         onConfirm={() => deleteMutation.mutate()}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <FamilyMetric label="بيقدر ينتخب" value={family.eligible_voters} />
+        <FamilyMetric label="ذكور ناخبون" value={family.eligible_male_voters} />
+        <FamilyMetric label="إناث ناخبات" value={family.eligible_female_voters} />
         <FamilyMetric label="ما بيقدر ينتخب" value={family.ineligible_voters} />
         <FamilyMetric label="غير محدد" value={family.unknown_voters} />
         <FamilyMetric label="أعمار العائلة" value={formatAgeSummary(family)} />
@@ -204,6 +206,8 @@ function Dashboard() {
     return {
       members: rows.reduce((sum, family) => sum + family.member_count, 0),
       voters: rows.reduce((sum, family) => sum + family.eligible_voters, 0),
+      eligibleMale: rows.reduce((sum, family) => sum + family.eligible_male_voters, 0),
+      eligibleFemale: rows.reduce((sum, family) => sum + family.eligible_female_voters, 0),
       ineligible: rows.reduce((sum, family) => sum + family.ineligible_voters, 0),
       unknown: rows.reduce((sum, family) => sum + family.unknown_voters, 0),
       male: rows.reduce((sum, family) => sum + family.male_count, 0),
@@ -350,6 +354,8 @@ function Dashboard() {
             ) : null}
             <span className="chip">الأفراد: {totals.members.toLocaleString("ar-EG")}</span>
             <span className="chip">بيقدر ينتخب: {totals.voters.toLocaleString("ar-EG")}</span>
+            <span className="chip">ذكور ناخبون: {totals.eligibleMale.toLocaleString("ar-EG")}</span>
+            <span className="chip">إناث ناخبات: {totals.eligibleFemale.toLocaleString("ar-EG")}</span>
             <span className="chip">ما بيقدر: {totals.ineligible.toLocaleString("ar-EG")}</span>
             {totals.unknown > 0 ? (
               <span className="chip">غير محدد: {totals.unknown.toLocaleString("ar-EG")}</span>
@@ -371,9 +377,9 @@ function Dashboard() {
                   <th className="p-3 font-semibold">بلدة النفوس</th>
                   <th className="p-3 font-semibold">الأفراد</th>
                   <th className="p-3 font-semibold">ينتخب</th>
+                  <th className="p-3 font-semibold">ذكور ناخبون</th>
+                  <th className="p-3 font-semibold">إناث ناخبات</th>
                   <th className="p-3 font-semibold">لا ينتخب</th>
-                  <th className="p-3 font-semibold">الذكور</th>
-                  <th className="p-3 font-semibold">الإناث</th>
                   <th className="p-3 font-semibold">إجراءات</th>
                 </tr>
               </thead>
@@ -415,6 +421,12 @@ function Dashboard() {
                         <td className="p-3 font-semibold text-success">
                           {family.eligible_voters.toLocaleString("ar-EG")}
                         </td>
+                        <td className="p-3 font-semibold text-success">
+                          {family.eligible_male_voters.toLocaleString("ar-EG")}
+                        </td>
+                        <td className="p-3 font-semibold text-success">
+                          {family.eligible_female_voters.toLocaleString("ar-EG")}
+                        </td>
                         <td className="p-3 font-semibold text-destructive">
                           {family.ineligible_voters.toLocaleString("ar-EG")}
                           {family.unknown_voters > 0 ? (
@@ -424,8 +436,6 @@ function Dashboard() {
                             </span>
                           ) : null}
                         </td>
-                        <td className="p-3">{family.male_count.toLocaleString("ar-EG")}</td>
-                        <td className="p-3">{family.female_count.toLocaleString("ar-EG")}</td>
                         <td className="p-3">
                           <div className="flex flex-wrap gap-2">
                             <button

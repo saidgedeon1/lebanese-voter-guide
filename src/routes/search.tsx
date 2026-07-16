@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PersonFilesPanel } from "@/components/PersonFilesPanel";
 import { PassportPhoto } from "@/components/PassportPhoto";
 import {
+  canVote,
   displayMaritalStatus,
   findSpouse,
   getFamilyMembers,
+  inferGender,
   isDeceased,
+  listFamilySummaries,
   normalizeArabic,
   normalizeRelation,
   searchByName,
@@ -23,9 +26,17 @@ function personLabel(person: Pick<Individual, "first_name" | "last_name" | "fath
   return [person.first_name, person.father_name, person.last_name].filter(Boolean).join(" ").trim();
 }
 
+function looksLikeRegistryNumber(value: string) {
+  const t = value.trim();
+  if (!t) return false;
+  return /^[\d٠-٩]+([\/\-]?[\d٠-٩]+)?$/.test(t);
+}
+
 function SearchPage() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<(Individual & { family: FamilyForm }) | null>(null);
+  const registryQuery = q.trim();
+  const registryMode = looksLikeRegistryNumber(registryQuery);
 
   const { data: searchResult, isFetching, error: searchError } = useQuery({
     queryKey: ["search", q],
@@ -34,6 +45,23 @@ function SearchPage() {
   });
   const results = searchResult?.results;
   const searchTruncated = searchResult?.truncated;
+
+  const { data: registryFamilyResult, isFetching: registryFamiliesLoading } = useQuery({
+    queryKey: ["family-summaries", "registry-search", registryQuery],
+    queryFn: () => listFamilySummaries({ registryNumber: registryQuery }),
+    enabled: registryMode,
+  });
+  const registryFamilies = registryFamilyResult?.families;
+
+  const registryTotals = useMemo(() => {
+    const rows = registryFamilies ?? [];
+    return {
+      families: rows.length,
+      eligibleMale: rows.reduce((sum, f) => sum + f.eligible_male_voters, 0),
+      eligibleFemale: rows.reduce((sum, f) => sum + f.eligible_female_voters, 0),
+      eligible: rows.reduce((sum, f) => sum + f.eligible_voters, 0),
+    };
+  }, [registryFamilies]);
 
   const { data: family } = useQuery({
     queryKey: ["family-members", selected?.family_form_id],
@@ -44,6 +72,21 @@ function SearchPage() {
   const spouse = selected && family ? findSpouse(selected, family) : null;
   const selectedIsWife =
     normalizeRelation(selected?.relation) === "زوجة" || normalizeRelation(selected?.relation) === "كنة";
+
+  const familyVoteCounts = useMemo(() => {
+    if (!family?.length) return null;
+    let eligibleMale = 0;
+    let eligibleFemale = 0;
+    let eligible = 0;
+    for (const m of family) {
+      if (canVote(m.birth_year, m.is_military, m) !== true) continue;
+      eligible += 1;
+      const g = inferGender(m.relation);
+      if (g === "male") eligibleMale += 1;
+      if (g === "female") eligibleFemale += 1;
+    }
+    return { eligible, eligibleMale, eligibleFemale };
+  }, [family]);
 
   return (
     <div className="space-y-6">
@@ -69,13 +112,69 @@ function SearchPage() {
           />
         </div>
 
+        {registryMode && (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <span className="chip !bg-primary/15 !text-primary">سجل {registryQuery}</span>
+              {registryFamiliesLoading ? (
+                <span className="chip">جاري تحميل العائلات...</span>
+              ) : (
+                <>
+                  <span className="chip">عائلات: {registryTotals.families.toLocaleString("ar-EG")}</span>
+                  <span className="chip">ينتخب: {registryTotals.eligible.toLocaleString("ar-EG")}</span>
+                  <span className="chip">ذكور ناخبون: {registryTotals.eligibleMale.toLocaleString("ar-EG")}</span>
+                  <span className="chip">إناث ناخبات: {registryTotals.eligibleFemale.toLocaleString("ar-EG")}</span>
+                </>
+              )}
+            </div>
+            {!registryFamiliesLoading && registryFamilies && registryFamilies.length > 0 && (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {registryFamilies.map((fam) => (
+                  <div
+                    key={fam.id}
+                    className="rounded-lg border border-border p-3 flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold">{fam.family_name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        استمارة #{fam.id} · {fam.registry_town} — {fam.registry_district} · {fam.member_count} أفراد
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-sm items-center">
+                      <span className="chip">ذكور ناخبون: {fam.eligible_male_voters}</span>
+                      <span className="chip">إناث ناخبات: {fam.eligible_female_voters}</span>
+                      <Link to="/families/$id" params={{ id: String(fam.id) }} search={{}} className="btn-ghost">
+                        تعديل
+                      </Link>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() => {
+                          const first = fam.members[0];
+                          if (!first) return;
+                          setSelected({ ...first, family: fam });
+                        }}
+                      >
+                        عرض الأفراد
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!registryFamiliesLoading && registryFamilies?.length === 0 && (
+              <div className="text-sm text-muted-foreground p-2">ما في عائلات بهالرقم.</div>
+            )}
+          </div>
+        )}
+
         {q.trim().length >= 1 && (
           <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
             {isFetching && <div className="text-sm text-muted-foreground p-3">جاري البحث...</div>}
             {searchError && (
               <div className="text-sm text-destructive p-3">تعذّر البحث: {(searchError as Error).message}</div>
             )}
-            {!isFetching && !searchError && results?.length === 0 && (
+            {!isFetching && !searchError && results?.length === 0 && !registryMode && (
               <div className="text-sm text-muted-foreground p-3">لا توجد نتائج مطابقة.</div>
             )}
             {searchTruncated ? (
@@ -246,7 +345,14 @@ function SearchPage() {
           </div>
 
           <div className="card-elev p-6">
-            <h2 className="font-bold text-xl mb-4">شجرة العائلة</h2>
+            <h2 className="font-bold text-xl mb-2">شجرة العائلة</h2>
+            {familyVoteCounts && (
+              <div className="mb-4 flex flex-wrap gap-2">
+                <span className="chip">ينتخب: {familyVoteCounts.eligible}</span>
+                <span className="chip">ذكور ناخبون: {familyVoteCounts.eligibleMale}</span>
+                <span className="chip">إناث ناخبات: {familyVoteCounts.eligibleFemale}</span>
+              </div>
+            )}
             {!family && <div className="text-sm text-muted-foreground">جاري التحميل...</div>}
             {family && (
               <FamilyTree

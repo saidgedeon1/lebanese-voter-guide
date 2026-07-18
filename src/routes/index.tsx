@@ -403,10 +403,10 @@ function Dashboard() {
               متصل بقاعدة البيانات
             </div>
             <h1 className="text-3xl sm:text-4xl font-black leading-tight">
-              أهلاً بك في الماكينة الانتخابية
+              أهلاً بك في الماكينة الانتخابية - بريح - الشوف
             </h1>
             <p className="mt-2 text-muted-foreground max-w-xl">
-              أدر الاستمارات العائلية، تابع الناخبين، وحلّل الميول السياسية بواجهة عربية كاملة.
+              سجل عائلات بلدة بريح في قضاء الشوف: استمارات، بحث، وإحصائيات الناخبين.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

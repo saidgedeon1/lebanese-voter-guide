@@ -62,10 +62,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "الماكينة الانتخابية وسجل العائلات" },
-      { name: "description", content: "منصة شاملة لإدارة الاستمارات العائلية والناخبين في لبنان" },
-      { property: "og:title", content: "الماكينة الانتخابية وسجل العائلات" },
-      { property: "og:description", content: "إدارة الاستمارات العائلية وقاعدة بيانات الناخبين" },
+      { title: "الماكينة الانتخابية - بريح - الشوف" },
+      {
+        name: "description",
+        content: "سجل عائلات وناخبي بلدة بريح في قضاء الشوف — استمارات، بحث، واستيراد Excel.",
+      },
+      { property: "og:title", content: "الماكينة الانتخابية - بريح - الشوف" },
+      {
+        property: "og:description",
+        content: "سجل عائلات وناخبي بلدة بريح في قضاء الشوف.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -117,15 +123,15 @@ function Nav() {
         <Link to="/" className="flex items-center gap-3 min-w-0">
           <img
             src="/logo.svg"
-            alt="شعار التطبيق"
+            alt="الماكينة الانتخابية - بريح - الشوف"
             className="h-11 w-11 shrink-0 rounded-2xl border border-border bg-card object-cover"
           />
           <div className="min-w-0">
             <div className="font-extrabold text-base sm:text-lg leading-tight truncate">
-              الماكينة الانتخابية
+              الماكينة الانتخابية - بريح - الشوف
             </div>
             <div className="text-[11px] sm:text-xs text-muted-foreground truncate">
-              سجل العائلات والناخبين
+              سجل عائلات بلدة بريح
             </div>
           </div>
         </Link>
@@ -169,7 +175,7 @@ function RootComponent() {
         <Outlet />
       </main>
       <footer className="mx-auto max-w-7xl px-4 sm:px-6 py-8 text-center text-xs text-muted-foreground">
-        <div>© {new Date().getFullYear()} — الماكينة الانتخابية وسجل العائلات</div>
+        <div>© {new Date().getFullYear()} — الماكينة الانتخابية - بريح - الشوف</div>
         <div className="mt-2 font-medium">app dev crafted by said GEDEON</div>
       </footer>
     </QueryClientProvider>

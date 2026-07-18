@@ -27,12 +27,21 @@ import {
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 type IndividualsSearch = {
-  filter?: "unknown_age";
+  filter?: "unknown_age" | "living" | "deceased" | "military" | "party";
 };
 
 export const Route = createFileRoute("/individuals")({
   validateSearch: (search: Record<string, unknown>): IndividualsSearch => {
-    if (search.filter === "unknown_age") return { filter: "unknown_age" };
+    const filter = search.filter;
+    if (
+      filter === "unknown_age" ||
+      filter === "living" ||
+      filter === "deceased" ||
+      filter === "military" ||
+      filter === "party"
+    ) {
+      return { filter };
+    }
     return {};
   },
   component: IndividualsList,
@@ -43,7 +52,7 @@ type ListedIndividual = Individual & {
   spouse_name?: string | null;
 };
 
-type VoterFilter = "" | "voted" | "deceased" | "expat" | "military" | "unknown_age";
+type VoterFilter = "" | "voted" | "deceased" | "expat" | "military" | "unknown_age" | "living" | "party";
 
 function IndividualsList() {
   const navigate = useNavigate({ from: "/individuals" });
@@ -58,13 +67,20 @@ function IndividualsList() {
   const [pendingDelete, setPendingDelete] = useState<ListedIndividual | null>(null);
 
   useEffect(() => {
-    if (searchParams.filter === "unknown_age") setVoterFilter("unknown_age");
+    if (searchParams.filter) setVoterFilter(searchParams.filter);
+    else setVoterFilter("");
   }, [searchParams.filter]);
 
   const setFilter = (next: VoterFilter) => {
     setVoterFilter(next);
+    const syncable =
+      next === "unknown_age" ||
+      next === "living" ||
+      next === "deceased" ||
+      next === "military" ||
+      next === "party";
     void navigate({
-      search: next === "unknown_age" ? { filter: "unknown_age" } : {},
+      search: syncable ? { filter: next } : {},
       replace: true,
     });
   };
@@ -167,7 +183,15 @@ function IndividualsList() {
           <p className="text-sm text-muted-foreground mt-1">
             {voterFilter === "unknown_age"
               ? "قائمة الـ check-up: الأحياء اللي ما عندهم سنة ولادة (المتوفّون مش مطلوب عمرهن)."
-              : "كل الأشخاص المسجّلين: رب العائلة، الزوجة، الأم، الأولاد، وجميع الأفراد."}
+              : voterFilter === "living"
+                ? "كل العايشين (من غير المتوفّين)."
+                : voterFilter === "deceased"
+                  ? "قائمة المتوفّين."
+                  : voterFilter === "party"
+                    ? "الأفراد المنتمون لحزب سياسي."
+                    : voterFilter === "military"
+                      ? "العسكريون المستثنون من الاقتراع."
+                      : "كل الأشخاص المسجّلين: رب العائلة، الزوجة، الأم، الأولاد، وجميع الأفراد."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -219,8 +243,10 @@ function IndividualsList() {
             onChange={(e) => setFilter(e.target.value as VoterFilter)}
           >
             <option value="">— الكل —</option>
-            <option value="unknown_age">عمر غير محدد (أحياء)</option>
+            <option value="living">عايشون</option>
             <option value="deceased">متوفّى</option>
+            <option value="party">منتمون لحزب</option>
+            <option value="unknown_age">عمر غير محدد (أحياء)</option>
             <option value="expat">مغترب</option>
             <option value="military">عسكري</option>
             <option value="voted">اقترع (مسجّل)</option>

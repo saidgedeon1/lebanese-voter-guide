@@ -553,7 +553,7 @@ export async function listIndividuals(filters: {
   political?: string;
   town?: string;
   search?: string;
-  voterFilter?: "" | "voted" | "deceased" | "expat" | "military" | "unknown_age";
+  voterFilter?: "" | "voted" | "deceased" | "expat" | "military" | "unknown_age" | "living" | "party";
 } = {}) {
   let q = sb
     .from("individuals")
@@ -564,6 +564,7 @@ export async function listIndividuals(filters: {
   if (filters.residence) q = q.ilike("current_residence", `%${filters.residence}%`);
   if (filters.political) q = q.eq("political_leaning", filters.political);
   if (filters.voterFilter === "unknown_age") q = q.is("birth_year", null);
+  if (filters.voterFilter === "military") q = q.eq("is_military", true);
   const { data, error } = await q;
   if (error) throw error;
 
@@ -589,6 +590,10 @@ export async function listIndividuals(filters: {
 
   if (filters.voterFilter === "deceased") {
     rows = rows.filter((r) => isDeceased(r));
+  } else if (filters.voterFilter === "living") {
+    rows = rows.filter((r) => !isDeceased(r));
+  } else if (filters.voterFilter === "party") {
+    rows = rows.filter((r) => isPartyAffiliation(r.political_leaning));
   } else if (filters.voterFilter === "voted") {
     rows = rows.filter((r) => !!r.has_voted && !isDeceased(r));
   } else if (filters.voterFilter === "expat") {

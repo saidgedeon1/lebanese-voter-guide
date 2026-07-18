@@ -91,19 +91,44 @@ function collectDashboardPeople(families: FamilySummary[], mode: DashListMode): 
   return people.sort((a, b) => a.first_name.localeCompare(b.first_name, "ar"));
 }
 
-function StatCard({ label, value, icon, tone }: { label: string; value: number; icon: string; tone: string }) {
-  return (
-    <div className="card-elev p-5 sm:p-6 relative overflow-hidden">
+function StatCard({
+  label,
+  value,
+  icon,
+  tone,
+  to,
+  search,
+  hash,
+  hideValue,
+  hint = "افتح القائمة ←",
+}: {
+  label: string;
+  value: number;
+  icon: string;
+  tone: string;
+  to?: "/individuals" | "/" | "/search" | "/families/new" | "/import";
+  search?: Record<string, string>;
+  hash?: string;
+  hint?: string;
+  hideValue?: boolean;
+}) {
+  const inner = (
+    <>
       <div
         className="absolute inset-0 opacity-[0.08] pointer-events-none"
         style={{ background: `radial-gradient(circle at 100% 0%, ${tone}, transparent 60%)` }}
       />
-      <div className="flex items-start justify-between gap-3">
+      <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm text-muted-foreground font-medium">{label}</div>
-          <div className="mt-2 text-3xl sm:text-4xl font-black tracking-tight">
-            {value.toLocaleString("ar-EG")}
-          </div>
+          {!hideValue ? (
+            <div className="mt-2 text-3xl sm:text-4xl font-black tracking-tight">
+              {Number(value || 0).toLocaleString("ar-EG")}
+            </div>
+          ) : (
+            <div className="mt-2 text-xl font-black tracking-tight">محرك البحث</div>
+          )}
+          {to || hash ? <div className="mt-2 text-sm text-primary font-semibold">{hint}</div> : null}
         </div>
         <div
           className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl"
@@ -112,8 +137,31 @@ function StatCard({ label, value, icon, tone }: { label: string; value: number; 
           {icon}
         </div>
       </div>
-    </div>
+    </>
   );
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        search={search ?? {}}
+        hash={hash}
+        className="card-elev p-5 sm:p-6 relative overflow-hidden hover:shadow-lg transition block"
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  if (hash) {
+    return (
+      <a href={`#${hash}`} className="card-elev p-5 sm:p-6 relative overflow-hidden hover:shadow-lg transition block">
+        {inner}
+      </a>
+    );
+  }
+
+  return <div className="card-elev p-5 sm:p-6 relative overflow-hidden">{inner}</div>;
 }
 
 function FamilyMetric({
@@ -449,37 +497,71 @@ function Dashboard() {
         <div className="card-elev p-6 text-destructive">تعذّر تحميل الإحصائيات.</div>
       ) : (
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard label="إجمالي الأفراد" value={isLoading ? 0 : data!.individuals} icon="🗳️" tone="oklch(0.55 0.14 155)" />
-          <StatCard label="العايشون" value={isLoading ? 0 : data!.living} icon="💚" tone="oklch(0.58 0.12 145)" />
-          <StatCard label="المتوفون" value={isLoading ? 0 : data!.deceased} icon="🕯️" tone="oklch(0.45 0.02 260)" />
-          <StatCard label="منتمون لحزب" value={isLoading ? 0 : data!.supporters} icon="🤝" tone="oklch(0.72 0.14 65)" />
-          <StatCard label="العسكريون المستثنون" value={isLoading ? 0 : data!.military} icon="⚠️" tone="oklch(0.55 0.22 25)" />
-          <StatCard label="إجمالي العائلات" value={isLoading ? 0 : data!.families} icon="🏠" tone="oklch(0.5 0.09 158)" />
-          <Link
+          <StatCard
+            label="إجمالي الأفراد"
+            value={isLoading ? 0 : data!.individuals}
+            icon="🗳️"
+            tone="oklch(0.55 0.14 155)"
+            to="/individuals"
+            search={{}}
+          />
+          <StatCard
+            label="العايشون"
+            value={isLoading ? 0 : data!.living}
+            icon="💚"
+            tone="oklch(0.58 0.12 145)"
+            to="/individuals"
+            search={{ filter: "living" }}
+          />
+          <StatCard
+            label="المتوفون"
+            value={isLoading ? 0 : data!.deceased}
+            icon="🕯️"
+            tone="oklch(0.45 0.02 260)"
+            to="/individuals"
+            search={{ filter: "deceased" }}
+          />
+          <StatCard
+            label="منتمون لحزب"
+            value={isLoading ? 0 : data!.supporters}
+            icon="🤝"
+            tone="oklch(0.72 0.14 65)"
+            to="/individuals"
+            search={{ filter: "party" }}
+          />
+          <StatCard
+            label="العسكريون المستثنون"
+            value={isLoading ? 0 : data!.military}
+            icon="⚠️"
+            tone="oklch(0.55 0.22 25)"
+            to="/individuals"
+            search={{ filter: "military" }}
+          />
+          <StatCard
+            label="إجمالي العائلات"
+            value={isLoading ? 0 : data!.families}
+            icon="🏠"
+            tone="oklch(0.5 0.09 158)"
+            hash="families-network"
+            hint="انزل لشبكة العائلات ←"
+          />
+          <StatCard
+            label="عمر غير محدد — أحياء فقط"
+            value={isLoading ? 0 : data!.unknown_age}
+            icon="🔎"
+            tone="oklch(0.65 0.16 55)"
             to="/individuals"
             search={{ filter: "unknown_age" }}
-            className="card-elev p-5 sm:p-6 relative overflow-hidden col-span-2 hover:shadow-lg transition"
-          >
-            <div
-              className="absolute inset-0 opacity-[0.08] pointer-events-none"
-              style={{ background: "radial-gradient(circle at 100% 0%, oklch(0.65 0.16 55), transparent 60%)" }}
-            />
-            <div className="relative flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm text-muted-foreground font-medium">عمر غير محدد — أحياء فقط</div>
-                <div className="mt-2 text-3xl sm:text-4xl font-black tracking-tight">
-                  {(isLoading ? 0 : data!.unknown_age).toLocaleString("ar-EG")}
-                </div>
-                <div className="mt-2 text-sm text-primary font-semibold">افتح القائمة ←</div>
-              </div>
-              <div
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl"
-                style={{ background: "color-mix(in oklab, oklch(0.65 0.16 55) 18%, transparent)" }}
-              >
-                🔎
-              </div>
-            </div>
-          </Link>
+          />
+          <StatCard
+            label="البحث عن شخص"
+            value={0}
+            icon="🔍"
+            tone="oklch(0.55 0.1 200)"
+            to="/search"
+            hideValue
+            hint="افتح محرك البحث ←"
+          />
         </section>
       )}
 
@@ -506,7 +588,7 @@ function Dashboard() {
         </Link>
       </section>
 
-      <section className="card-elev overflow-hidden">
+      <section id="families-network" className="card-elev overflow-hidden scroll-mt-24">
         <div className="p-6 sm:p-7 border-b border-border">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>

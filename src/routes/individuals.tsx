@@ -27,7 +27,7 @@ import {
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 type IndividualsSearch = {
-  filter?: "unknown_age" | "living" | "deceased" | "military" | "party";
+  filter?: "unknown_age" | "living" | "deceased" | "military" | "party" | "with_phone" | "without_phone";
 };
 
 export const Route = createFileRoute("/individuals")({
@@ -38,7 +38,9 @@ export const Route = createFileRoute("/individuals")({
       filter === "living" ||
       filter === "deceased" ||
       filter === "military" ||
-      filter === "party"
+      filter === "party" ||
+      filter === "with_phone" ||
+      filter === "without_phone"
     ) {
       return { filter };
     }
@@ -52,7 +54,17 @@ type ListedIndividual = Individual & {
   spouse_name?: string | null;
 };
 
-type VoterFilter = "" | "voted" | "deceased" | "expat" | "military" | "unknown_age" | "living" | "party";
+type VoterFilter =
+  | ""
+  | "voted"
+  | "deceased"
+  | "expat"
+  | "military"
+  | "unknown_age"
+  | "living"
+  | "party"
+  | "with_phone"
+  | "without_phone";
 
 function IndividualsList() {
   const navigate = useNavigate({ from: "/individuals" });
@@ -78,7 +90,9 @@ function IndividualsList() {
       next === "living" ||
       next === "deceased" ||
       next === "military" ||
-      next === "party";
+      next === "party" ||
+      next === "with_phone" ||
+      next === "without_phone";
     void navigate({
       search: syncable ? { filter: next } : {},
       replace: true,
@@ -191,7 +205,11 @@ function IndividualsList() {
                     ? "الأفراد المنتمون لحزب سياسي."
                     : voterFilter === "military"
                       ? "العسكريون المستثنون من الاقتراع."
-                      : "كل الأشخاص المسجّلين: رب العائلة، الزوجة، الأم، الأولاد، وجميع الأفراد."}
+                      : voterFilter === "with_phone"
+                        ? "الأحياء اللي عندهم رقم جوال."
+                        : voterFilter === "without_phone"
+                          ? "الأحياء اللي ما عندهم رقم جوال — للمتابعة."
+                          : "كل الأشخاص المسجّلين: رب العائلة، الزوجة، الأم، الأولاد، وجميع الأفراد."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -245,6 +263,8 @@ function IndividualsList() {
             <option value="">— الكل —</option>
             <option value="living">عايشون</option>
             <option value="deceased">متوفّى</option>
+            <option value="with_phone">عندهن جوال (أحياء)</option>
+            <option value="without_phone">بدون جوال (أحياء)</option>
             <option value="party">منتمون لحزب</option>
             <option value="unknown_age">عمر غير محدد (أحياء)</option>
             <option value="expat">مغترب</option>

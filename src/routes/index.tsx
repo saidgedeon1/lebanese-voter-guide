@@ -554,6 +554,22 @@ function Dashboard() {
             search={{ filter: "unknown_age" }}
           />
           <StatCard
+            label="عندهن رقم تلفون — أحياء"
+            value={isLoading ? 0 : data!.with_phone}
+            icon="📞"
+            tone="oklch(0.58 0.12 180)"
+            to="/individuals"
+            search={{ filter: "with_phone" }}
+          />
+          <StatCard
+            label="ما عندهن رقم تلفون — أحياء"
+            value={isLoading ? 0 : data!.without_phone}
+            icon="📵"
+            tone="oklch(0.55 0.08 30)"
+            to="/individuals"
+            search={{ filter: "without_phone" }}
+          />
+          <StatCard
             label="البحث عن شخص"
             value={0}
             icon="🔍"

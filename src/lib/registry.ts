@@ -508,6 +508,7 @@ export async function fetchStats() {
     { count: deceasedByStatus },
     { count: deceasedByLegacy },
     { count: unknownAge },
+    phoneProbe,
   ] = await Promise.all([
     sb.from("individuals").select("*", { count: "exact", head: true }),
     sb.from("family_forms").select("*", { count: "exact", head: true }),
@@ -529,11 +530,24 @@ export async function fetchStats() {
       .select("*", { count: "exact", head: true })
       .is("birth_year", null)
       .neq("voter_status", "متوفّى"),
+    sb.from("individuals").select("mobile, voter_status, preferred_candidate").limit(10000),
   ]);
 
   const totalPeople = individuals ?? 0;
   const deceasedCount = (deceasedByStatus ?? 0) + (deceasedByLegacy ?? 0);
   const votedCount = voted ?? 0;
+
+  let withPhone = 0;
+  let withoutPhone = 0;
+  for (const row of (phoneProbe.data ?? []) as Array<{
+    mobile: string | null;
+    voter_status: string | null;
+    preferred_candidate: string | null;
+  }>) {
+    if (isDeceased(row)) continue;
+    if ((row.mobile ?? "").trim()) withPhone += 1;
+    else withoutPhone += 1;
+  }
 
   return {
     individuals: totalPeople,
@@ -545,6 +559,8 @@ export async function fetchStats() {
     living: Math.max(0, totalPeople - deceasedCount),
     // Living people without birth year (deceased never need age for checkup).
     unknown_age: unknownAge ?? 0,
+    with_phone: withPhone,
+    without_phone: withoutPhone,
   };
 }
 
@@ -553,7 +569,17 @@ export async function listIndividuals(filters: {
   political?: string;
   town?: string;
   search?: string;
-  voterFilter?: "" | "voted" | "deceased" | "expat" | "military" | "unknown_age" | "living" | "party";
+  voterFilter?:
+    | ""
+    | "voted"
+    | "deceased"
+    | "expat"
+    | "military"
+    | "unknown_age"
+    | "living"
+    | "party"
+    | "with_phone"
+    | "without_phone";
 } = {}) {
   let q = sb
     .from("individuals")
@@ -603,6 +629,10 @@ export async function listIndividuals(filters: {
   } else if (filters.voterFilter === "unknown_age") {
     // Missing age only matters for the living — deceased can't vote either way.
     rows = rows.filter((r) => getAge(r.birth_year) === null && !isDeceased(r));
+  } else if (filters.voterFilter === "with_phone") {
+    rows = rows.filter((r) => !isDeceased(r) && Boolean((r.mobile ?? "").trim()));
+  } else if (filters.voterFilter === "without_phone") {
+    rows = rows.filter((r) => !isDeceased(r) && !Boolean((r.mobile ?? "").trim()));
   }
 
   if (filters.search?.trim()) {

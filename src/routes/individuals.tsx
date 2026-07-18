@@ -281,6 +281,7 @@ function IndividualsList() {
               <tr className="text-right">
                 <th className="p-3 font-semibold">رقم السجل</th>
                 <th className="p-3 font-semibold">الاسم الكامل</th>
+                <th className="p-3 font-semibold">الجوال</th>
                 <th className="p-3 font-semibold">صلة القرابة</th>
                 <th className="p-3 font-semibold">بلدة النفوس</th>
                 <th className="p-3 font-semibold">السكن الحالي</th>
@@ -292,14 +293,14 @@ function IndividualsList() {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                  <td colSpan={9} className="p-6 text-center text-muted-foreground">
                     جاري التحميل...
                   </td>
                 </tr>
               )}
               {!isLoading && data?.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                  <td colSpan={9} className="p-6 text-center text-muted-foreground">
                     لا توجد نتائج
                   </td>
                 </tr>
@@ -308,6 +309,7 @@ function IndividualsList() {
                 const rowEligible = canVote(r.birth_year, r.is_military, r);
                 const rowAge = getAge(r.birth_year);
                 const deceased = isDeceased(r);
+                const mobile = (r.mobile ?? "").trim();
 
                 return (
                   <tr key={r.id} className={`border-t border-border ${r.is_military || deceased ? "bg-destructive/5" : ""}`}>
@@ -323,6 +325,19 @@ function IndividualsList() {
                         </div>
                         <div>زوج/زوجة: {r.spouse_name || "—"}</div>
                       </div>
+                    </td>
+                    <td className="p-3">
+                      {mobile ? (
+                        <a
+                          href={`tel:${mobile}`}
+                          className="font-bold text-primary dir-ltr inline-block hover:underline"
+                          dir="ltr"
+                        >
+                          {mobile}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="p-3">{r.relation || "—"}</td>
                     <td className="p-3">{r.family?.registry_town || "—"}</td>

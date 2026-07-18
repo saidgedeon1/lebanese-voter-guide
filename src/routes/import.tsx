@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import {
+  downloadFullBackup,
   downloadImportTemplate,
   importExcelRows,
   parseExcelFile,
@@ -20,6 +21,9 @@ function ImportPage() {
   const [fileName, setFileName] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -69,6 +73,37 @@ function ImportPage() {
       </div>
 
       <section className="card-elev p-5 sm:p-7 space-y-5">
+        <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-5">
+          <h2 className="font-bold text-lg">نسخة احتياطية كاملة</h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            بتنزّل ملفين: Excel (نفس أعمدة الاستيراد) و JSON (مع أرقام الـ ID). احفظهن عندك بأمان.
+          </p>
+          <button
+            type="button"
+            className="btn-primary mt-4"
+            disabled={backupBusy}
+            onClick={async () => {
+              setBackupBusy(true);
+              setBackupMessage(null);
+              setBackupError(null);
+              try {
+                const result = await downloadFullBackup();
+                setBackupMessage(
+                  `تم التحميل: ${result.families.toLocaleString("ar-EG")} عيلة و ${result.people.toLocaleString("ar-EG")} فرد.`,
+                );
+              } catch (err) {
+                setBackupError((err as Error).message || "تعذّر إنشاء النسخة الاحتياطية.");
+              } finally {
+                setBackupBusy(false);
+              }
+            }}
+          >
+            {backupBusy ? "جاري تجهيز النسخة..." : "تحميل نسخة احتياطية كاملة ↓"}
+          </button>
+          {backupMessage ? <div className="mt-3 text-sm font-semibold text-success">{backupMessage}</div> : null}
+          {backupError ? <div className="mt-3 text-sm text-destructive">{backupError}</div> : null}
+        </div>
+
         <div className="grid md:grid-cols-2 gap-4">
           <div className="rounded-2xl border border-border bg-muted/30 p-5">
             <h2 className="font-bold text-lg">١ · نزّل القالب</h2>

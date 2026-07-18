@@ -13,6 +13,7 @@ import {
   type FamilySummary,
   type Individual,
 } from "@/lib/registry";
+import { downloadFullBackup } from "@/lib/excel-import";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 
 export const Route = createFileRoute("/")({
@@ -313,6 +314,9 @@ function Dashboard() {
   const [expandedFamilyId, setExpandedFamilyId] = useState<number | null>(null);
   const [listMode, setListMode] = useState<DashListMode | null>(null);
   const [listFamilyId, setListFamilyId] = useState<number | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({ queryKey: ["stats"], queryFn: fetchStats });
   const {
@@ -406,11 +410,39 @@ function Dashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={backupBusy}
+              onClick={async () => {
+                setBackupBusy(true);
+                setBackupMessage(null);
+                setBackupError(null);
+                try {
+                  const result = await downloadFullBackup();
+                  setBackupMessage(
+                    `تم التحميل: ${result.families.toLocaleString("ar-EG")} عيلة و ${result.people.toLocaleString("ar-EG")} فرد (Excel + JSON).`,
+                  );
+                } catch (err) {
+                  setBackupError((err as Error).message || "تعذّر إنشاء النسخة الاحتياطية.");
+                } finally {
+                  setBackupBusy(false);
+                }
+              }}
+            >
+              {backupBusy ? "جاري تجهيز النسخة..." : "تحميل نسخة احتياطية ↓"}
+            </button>
             <Link to="/families/new" className="btn-primary">+ إضافة استمارة جديدة</Link>
             <Link to="/import" className="btn-ghost">استيراد Excel</Link>
             <Link to="/search" className="btn-ghost">البحث عن شخص</Link>
           </div>
         </div>
+        {backupMessage ? (
+          <div className="relative mt-4 text-sm font-semibold text-success">{backupMessage}</div>
+        ) : null}
+        {backupError ? (
+          <div className="relative mt-4 text-sm text-destructive">{backupError}</div>
+        ) : null}
       </section>
 
       {error ? (

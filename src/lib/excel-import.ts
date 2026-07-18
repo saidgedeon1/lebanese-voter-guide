@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { supabase } from "@/integrations/supabase/client";
 import {
   upsertFamilyWithIndividuals,
   type FamilyForm,
@@ -147,6 +148,149 @@ export function downloadImportTemplate() {
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, "استمارة");
   XLSX.writeFile(book, "نموذج-استيراد-عائلات.xlsx");
+}
+
+function yn(value: boolean | null | undefined) {
+  return value ? "نعم" : "لا";
+}
+
+async function fetchAllFamiliesWithMembers() {
+  const pageSize = 500;
+  let from = 0;
+  const all: Array<FamilyForm & { individuals?: Individual[] | null }> = [];
+  while (true) {
+    const { data, error } = await supabase
+      .from("family_forms")
+      .select("*, individuals(*)")
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as Array<FamilyForm & { individuals?: Individual[] | null }>;
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
+/** Full backup Excel (same columns as import) + JSON with IDs for restore safety. */
+export async function downloadFullBackup() {
+  const families = await fetchAllFamiliesWithMembers();
+  const excelRows: (string | number)[][] = [[...EXCEL_HEADERS]];
+  let peopleCount = 0;
+
+  for (const fam of families) {
+    const members = [...(fam.individuals ?? [])].sort((a, b) => a.id - b.id);
+    const familyKey = `F-${fam.id}`;
+    if (members.length === 0) {
+      excelRows.push([
+        familyKey,
+        fam.registry_district || "",
+        fam.registry_town || "",
+        fam.sect || "",
+        fam.registry_number || "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        fam.winter_country || "",
+        fam.winter_governorate || "",
+        fam.winter_district || "",
+        fam.winter_town || "",
+        fam.winter_street || "",
+        fam.winter_phone || "",
+        fam.summer_country || "",
+        fam.summer_governorate || "",
+        fam.summer_district || "",
+        fam.summer_town || "",
+        fam.summer_street || "",
+        fam.summer_phone || "",
+      ]);
+      continue;
+    }
+
+    for (const m of members) {
+      peopleCount += 1;
+      excelRows.push([
+        familyKey,
+        fam.registry_district || "",
+        fam.registry_town || "",
+        fam.sect || "",
+        fam.registry_number || "",
+        m.relation || "",
+        m.first_name || "",
+        m.last_name || "",
+        m.father_name || "",
+        m.mother_name || "",
+        m.birth_year?.toString() || "",
+        m.mobile || "",
+        m.current_residence || "",
+        m.marital_status || "",
+        m.voter_status || "",
+        m.political_leaning || "",
+        m.preferred_candidate || "",
+        yn(m.lives_with_family),
+        yn(m.is_military),
+        yn(m.has_voted),
+        fam.winter_country || "",
+        fam.winter_governorate || "",
+        fam.winter_district || "",
+        fam.winter_town || "",
+        fam.winter_street || "",
+        fam.winter_phone || "",
+        fam.summer_country || "",
+        fam.summer_governorate || "",
+        fam.summer_district || "",
+        fam.summer_town || "",
+        fam.summer_street || "",
+        fam.summer_phone || "",
+      ]);
+    }
+  }
+
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const book = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet(excelRows);
+  XLSX.utils.book_append_sheet(book, sheet, "استمارة");
+  const meta = XLSX.utils.aoa_to_sheet([
+    ["تاريخ النسخة", new Date().toISOString()],
+    ["عدد العائلات", families.length],
+    ["عدد الأفراد", peopleCount],
+    ["ملاحظة", "يمكن إعادة استيراد ورقة استمارة من صفحة الاستيراد"],
+  ]);
+  XLSX.utils.book_append_sheet(book, meta, "ملخص");
+  XLSX.writeFile(book, `backup-الماكينة-الانتخابية-${stamp}.xlsx`);
+
+  // JSON with IDs for a full structural backup
+  const payload = {
+    exported_at: new Date().toISOString(),
+    families_count: families.length,
+    people_count: peopleCount,
+    families: families.map((fam) => ({
+      ...fam,
+      individuals: [...(fam.individuals ?? [])].sort((a, b) => a.id - b.id),
+    })),
+  };
+  const jsonBlob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(jsonBlob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `backup-الماكينة-الانتخابية-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  return { families: families.length, people: peopleCount };
 }
 
 export async function parseExcelFile(file: File): Promise<ExcelImportPreview> {

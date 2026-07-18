@@ -480,7 +480,7 @@ function Dashboard() {
             <div>
               <h2 className="text-2xl font-black">شبكة العائلات</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                اكتب رقم السجل لتشوف كل العائلات اللي عنده — مع مين بيقدر ينتخب ومين لأ.
+                ابحث باسم شخص أو رقم سجل — البحث بيلاقي العيلة حتى لو مش من آخر ٥٠٠ استمارة.
               </p>
             </div>
             <Link to="/families/new" className="btn-ghost">

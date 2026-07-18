@@ -725,6 +725,78 @@ export async function listFamilySummaries(filters: {
   town?: string;
   political?: string;
 } = {}) {
+  const searchRaw = (filters.search ?? "").trim();
+  const searchTokens = searchRaw.split(/\s+/).filter(Boolean);
+  const registryNumber = (filters.registryNumber ?? "").trim();
+
+  // Name / phone search: find matching people first so we don't miss families
+  // outside the newest-500 window.
+  if (searchRaw) {
+    const { data: peopleRows, error: peopleError } = await sb
+      .from("individuals")
+      .select("*, family:family_forms(*)")
+      .order("id", { ascending: false })
+      .limit(5000);
+    if (peopleError) throw peopleError;
+
+    const matchedFamilyIds = new Set<number>();
+    for (const row of (peopleRows ?? []) as Array<Individual & { family: FamilyForm | null }>) {
+      if (!row.family) continue;
+      if (registryNumber && (row.family.registry_number ?? "").trim() !== registryNumber) continue;
+      if (filters.district && !row.family.registry_district?.includes(filters.district)) continue;
+      if (filters.town && !row.family.registry_town?.includes(filters.town)) continue;
+
+      const fields = [row.first_name, row.father_name, row.last_name, row.mother_name];
+      const nameHit =
+        nameFieldsMatch(fields, searchTokens) ||
+        nameFieldsMatch(fields, [searchRaw]) ||
+        (searchTokens.length >= 2 &&
+          nameTokenMatches(row.first_name, searchTokens[0]!) &&
+          (nameTokenMatches(row.last_name, searchTokens[1]!) ||
+            nameTokenMatches(row.father_name, searchTokens[1]!))) ||
+        (searchTokens.length >= 3 &&
+          nameTokenMatches(row.first_name, searchTokens[0]!) &&
+          nameTokenMatches(row.father_name, searchTokens[1]!) &&
+          nameTokenMatches(row.last_name, searchTokens[2]!));
+
+      const needle = normalizeArabic(searchRaw);
+      const extraHit = [
+        row.mobile,
+        row.current_residence,
+        row.family.registry_number,
+        row.family.registry_town,
+        row.family.winter_phone,
+        row.family.summer_phone,
+      ].some((value) => normalizeArabic(value).includes(needle));
+
+      if (nameHit || extraHit) matchedFamilyIds.add(row.family_form_id);
+    }
+
+    if (matchedFamilyIds.size === 0) {
+      return { families: [] as FamilySummary[], truncated: (peopleRows ?? []).length >= 5000 };
+    }
+
+    const ids = [...matchedFamilyIds].slice(0, 500);
+    const { data, error } = await sb
+      .from("family_forms")
+      .select("*, individuals(*)")
+      .in("id", ids)
+      .order("id", { ascending: false });
+    if (error) throw error;
+
+    const families = ((data ?? []) as Array<FamilyForm & { individuals?: Individual[] | null }>)
+      .map(toFamilySummary)
+      .filter((family) => {
+        if (filters.political && !family.members.some((member) => member.political_leaning === filters.political)) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => b.id - a.id);
+
+    return { families, truncated: (peopleRows ?? []).length >= 5000 || matchedFamilyIds.size > 500 };
+  }
+
   let q = sb
     .from("family_forms")
     .select("*, individuals(*)")
@@ -733,13 +805,11 @@ export async function listFamilySummaries(filters: {
 
   if (filters.district) q = q.ilike("registry_district", `%${filters.district}%`);
   if (filters.town) q = q.ilike("registry_town", `%${filters.town}%`);
-  const registryNumber = (filters.registryNumber ?? "").trim();
   if (registryNumber) q = q.eq("registry_number", registryNumber);
 
   const { data, error } = await q;
   if (error) throw error;
 
-  const search = normalizeArabic(filters.search);
   const rawCount = (data ?? []).length;
 
   const families = ((data ?? []) as Array<FamilyForm & { individuals?: Individual[] | null }>)
@@ -748,27 +818,7 @@ export async function listFamilySummaries(filters: {
       if (filters.political && !family.members.some((member) => member.political_leaning === filters.political)) {
         return false;
       }
-
-      if (!search) return true;
-
-      const haystacks = [
-        family.family_name,
-        family.registry_town,
-        family.registry_district,
-        family.registry_number ?? "",
-        family.winter_phone ?? "",
-        family.summer_phone ?? "",
-        ...family.members.flatMap((member) => [
-          member.first_name,
-          member.last_name,
-          member.father_name ?? "",
-          member.mother_name ?? "",
-          member.mobile ?? "",
-          member.current_residence ?? "",
-        ]),
-      ];
-
-      return haystacks.some((value) => normalizeArabic(value).includes(search));
+      return true;
     });
 
   return { families, truncated: rawCount >= 500 };

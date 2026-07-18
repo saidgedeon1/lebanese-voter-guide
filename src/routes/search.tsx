@@ -352,9 +352,15 @@ function SearchPage() {
                           <div className="text-xs text-muted-foreground mt-1">
                             سجل {person.family?.registry_number || "—"} · استمارة #{person.family_form_id}
                             {age != null ? ` · عمر ${age}` : ""}
+                            {person.mobile?.trim() ? ` · 📞 ${person.mobile.trim()}` : ""}
                           </div>
                         </div>
-                        <span className="text-xs text-primary font-semibold">عرض الملف ←</span>
+                        <div className="text-left shrink-0 space-y-1">
+                          {person.mobile?.trim() ? (
+                            <div className="text-sm font-bold text-primary dir-ltr">{person.mobile.trim()}</div>
+                          ) : null}
+                          <span className="text-xs text-primary font-semibold">عرض الملف ←</span>
+                        </div>
                       </div>
                     </button>
                   );
@@ -399,9 +405,15 @@ function SearchPage() {
                     <div className="text-xs text-muted-foreground">
                       {r.first_name} {r.father_name || "—"} {r.last_name} · سجل {r.family?.registry_number || "—"} ·{" "}
                       {r.family?.registry_town || "—"}
+                      {r.mobile?.trim() ? ` · 📞 ${r.mobile.trim()}` : ""}
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground">استمارة #{r.family_form_id}</span>
+                  <div className="text-left shrink-0 space-y-1">
+                    <div className="text-xs text-muted-foreground">استمارة #{r.family_form_id}</div>
+                    {r.mobile?.trim() ? (
+                      <div className="text-sm font-bold text-primary dir-ltr text-left">{r.mobile.trim()}</div>
+                    ) : null}
+                  </div>
                 </div>
               </button>
             ))}
@@ -436,6 +448,15 @@ function SearchPage() {
                 <div className="text-xs text-muted-foreground">
                   {normalizeRelation(selected.relation) || selected.relation}
                 </div>
+                {selected.mobile?.trim() ? (
+                  <a
+                    href={`tel:${selected.mobile.trim()}`}
+                    className="mt-2 inline-flex items-center gap-2 text-base font-bold text-primary dir-ltr"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    📞 {selected.mobile.trim()}
+                  </a>
+                ) : null}
               </div>
             </div>
             <div className="flex flex-wrap gap-2 mb-5">
@@ -730,12 +751,18 @@ function FamilyTree({
                             ? ` · عائلتها: ${m.last_name}`
                             : ""}
                           {m.birth_year ? ` · مواليد ${m.birth_year}` : ""}
+                          {m.mobile?.trim() ? ` · 📞 ${m.mobile.trim()}` : ""}
                         </div>
                       </div>
                     </div>
-                    {m.is_military && (
-                      <span className="chip !bg-destructive !text-destructive-foreground shrink-0">عسكري</span>
-                    )}
+                    <div className="shrink-0 flex flex-col items-end gap-1">
+                      {m.mobile?.trim() ? (
+                        <span className="text-sm font-bold text-primary dir-ltr">{m.mobile.trim()}</span>
+                      ) : null}
+                      {m.is_military && (
+                        <span className="chip !bg-destructive !text-destructive-foreground">عسكري</span>
+                      )}
+                    </div>
                   </button>
                 );
               })}
